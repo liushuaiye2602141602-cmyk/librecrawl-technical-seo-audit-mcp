@@ -69,15 +69,18 @@ def _get_runner() -> "RuleRunner":
     if _runner_cache is None:
         from audit_rules.providers.gsc_provider import GSCDataProvider
         from audit_rules.providers.pagespeed_provider import PageSpeedDataProvider
+        from audit_rules.providers.semrush_provider import SemrushDataProvider
         from audit_rules.registry import load_registry
         from audit_rules.runner import RuleRunner
 
         registry = load_registry()
         pagespeed = PageSpeedDataProvider()
         gsc = GSCDataProvider()
+        semrush = SemrushDataProvider()
         _runner_cache = RuleRunner(
             registry,
-            providers={pagespeed.name: pagespeed, gsc.name: gsc},
+            providers={pagespeed.name: pagespeed, gsc.name: gsc,
+                       semrush.name: semrush},
         )
     return _runner_cache
 

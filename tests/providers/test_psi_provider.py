@@ -71,7 +71,7 @@ def test_integration_runner_registers_pagespeed_provider(monkeypatch):
     integration.reset_runner_cache()
     runner = integration._get_runner()
 
-    assert set(runner.providers) == {"PageSpeed API", "GSC API"}
+    assert set(runner.providers) == {"PageSpeed API", "GSC API", "Semrush API"}
     assert isinstance(runner.providers["PageSpeed API"], PageSpeedDataProvider)
     assert runner.providers["PageSpeed API"].is_available() is False
 
