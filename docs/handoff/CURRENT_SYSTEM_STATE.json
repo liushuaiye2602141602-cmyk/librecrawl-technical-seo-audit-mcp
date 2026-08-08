@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-08T20:29:48.627348+00:00",
-  "git_branch": "feat/master-audit-foundation",
-  "git_head": "328760f38ddd4e2375c4682278aa2b0eb72dbf06",
-  "git_commit_short": "328760f",
+  "generated_at": "2026-08-09T05:12:54+08:00",
+  "git_branch": "feat/master-audit-completion",
+  "git_head": "354728b48c482dabc54455f1fbd5b0d7a20ba420",
+  "git_commit_short": "354728b",
   "python": "3.14.5",
   "tests": {
-    "collected": 457,
-    "passed": 457,
+    "collected": 503,
+    "passed": 503,
     "failed": 0,
     "skipped": 0
   },
@@ -17,77 +17,47 @@
     "missing": 0,
     "classifications": {
       "EXISTING_FULL": 18,
-      "EXISTING_PARTIAL": 32,
+      "EXISTING_PARTIAL": 33,
       "NEW_EXTERNAL_DATA": 16,
       "NEW_MANUAL": 13,
-      "NEW_AUTO": 1
+      "NEW_AUTO": 0
     },
-    "adapter_count": 47,
-    "phase4a_completed_rules": [
-      18,
-      32,
-      39,
-      43,
-      47,
-      51,
-      60,
-      67
-    ],
-    "phase4b_deferred_rules": [
-      74
-    ]
+    "adapter_count": 48,
+    "phase4a_completed_rules": [18, 32, 39, 43, 47, 51, 60, 67],
+    "phase4b_completed_rules": [74],
+    "phase4b_deferred_rules": []
   },
   "providers": {
     "librecrawl": {
       "status": "IMPLEMENTED",
       "module": "audit_rules/providers/librecrawl_provider.py"
     },
+    "snapshot_baseline": {
+      "status": "IMPLEMENTED",
+      "module": "audit_rules/snapshot.py"
+    },
     "pagespeed": {
       "status": "IMPLEMENTED",
-      "live_validated": true,
+      "live_validated": false,
       "note": "KEY_PRESENT_NOT_SMOKE_TESTED",
       "module": "audit_rules/providers/pagespeed_provider.py"
     },
-    "gsc": {
-      "status": "NOT_STARTED",
-      "module": null
-    },
-    "semrush": {
-      "status": "NOT_STARTED",
-      "module": null
-    },
-    "ga4": {
-      "status": "NOT_STARTED",
-      "module": null
-    },
-    "server_logs": {
-      "status": "NOT_STARTED",
-      "module": null
-    },
-    "wordpress_privileged": {
-      "status": "NOT_STARTED",
-      "module": null
-    }
+    "gsc": {"status": "NOT_STARTED", "module": null},
+    "semrush": {"status": "NOT_STARTED", "module": null},
+    "ga4": {"status": "NOT_STARTED", "module": null},
+    "server_logs": {"status": "NOT_STARTED", "module": null},
+    "wordpress_privileged": {"status": "NOT_STARTED", "module": null}
   },
   "artifacts": {
     "legacy": "server.py _build_report() outputs",
-    "coverage": {
-      "status": "IMPLEMENTED",
-      "file": "coverage.csv"
-    },
-    "tasks": {
-      "status": "IMPLEMENTED",
-      "file": "master-audit-tasks.csv"
-    },
-    "performance": {
-      "status": "IMPLEMENTED",
-      "file": "performance.csv"
-    },
-    "manual_review": {
-      "status": "NOT_STARTED"
-    },
+    "coverage": {"status": "IMPLEMENTED", "file": "coverage.csv"},
+    "tasks": {"status": "IMPLEMENTED", "file": "master-audit-tasks.csv"},
+    "performance": {"status": "IMPLEMENTED", "file": "performance.csv"},
+    "manual_review": {"status": "NOT_STARTED"},
     "snapshot_diff": {
-      "status": "NOT_STARTED"
+      "status": "IMPLEMENTED",
+      "snapshot_file": "*.audit-snapshot-v1.json.gz",
+      "diff_file": "*.crawl-diff.csv"
     }
   },
   "feature_flags": {
@@ -99,17 +69,19 @@
       "default": "true",
       "desc": "Enable PSI provider within V3"
     },
-    "PAGESPEED_API_KEY": {
-      "default": "",
-      "desc": "Google PSI API key"
-    },
-    "PSI_SAMPLE_LIMIT": {
-      "default": "20",
-      "desc": "Max URLs for PSI per session"
-    },
+    "PAGESPEED_API_KEY": {"default": "", "desc": "Google PSI API key"},
+    "PSI_SAMPLE_LIMIT": {"default": "20", "desc": "Max URLs for PSI per session"},
     "PSI_STRATEGIES": {
       "default": "mobile",
       "desc": "PSI strategies: mobile or mobile,desktop"
+    },
+    "AUDIT_SNAPSHOT_BASELINE_PATH": {
+      "default": "",
+      "desc": "Optional portable Rule 74 baseline snapshot"
+    },
+    "AUDIT_SNAPSHOT_OUTPUT_DIR": {
+      "default": "REPORTS_DIR",
+      "desc": "Optional persistent snapshot and diff output directory"
     }
   },
   "known_credentials": {
@@ -120,7 +92,5 @@
     "SERVER_LOG_PATH": false,
     "WP_ADMIN_CREDENTIALS": false
   },
-  "live_validations_pending": [
-    "PSI_SMOKE_NOT_RUN"
-  ]
+  "live_validations_pending": ["PSI_SMOKE_NOT_RUN"]
 }

@@ -440,6 +440,8 @@ All environment variables are optional — the defaults just work. Set them via 
 | `MCP_PORT` | `5081` | MCP wrapper port |
 | `MCP_TRANSPORT` | `http` | `http` (streamable) or `stdio` |
 | `REPORTS_DIR` | `~/librecrawl-reports` | Where audit zips land |
+| `AUDIT_SNAPSHOT_BASELINE_PATH` | unset | Optional Rule 74 baseline (`audit-snapshot-v1.json.gz`) |
+| `AUDIT_SNAPSHOT_OUTPUT_DIR` | `REPORTS_DIR` | Persistent directory for current snapshots and crawl diffs |
 | `LIBRECRAWL_UPSTREAM_DB` | `~/.librecrawl/upstream/users.db` | LibreCrawl's SQLite, for orphan/cleanup checks (degrades gracefully if absent) |
 | `PAGESPEED_API_KEY` | unset | Optional — enables `librecrawl_pagespeed*` (raises PSI limits) |
 
@@ -487,6 +489,7 @@ Deeper guides live in [`docs/`](docs/):
 | **[Tools Reference](docs/TOOLS.md)** | All 37 MCP tools — signatures, arguments, when to use each |
 | **[Architecture](docs/ARCHITECTURE.md)** | How the wrapper, background worker, AIMD controller, and LibreCrawl backend fit together |
 | **[Troubleshooting](docs/TROUBLESHOOTING.md)** | Common errors and fixes — backend unreachable, empty audits, PDF/WeasyPrint, Docker health, big-site tuning |
+| **[Snapshot Diff](docs/audit/SNAPSHOT_DIFF.md)** | Portable crawl snapshots, Rule 74 baseline workflow, schema, and failure semantics |
 
 ---
 

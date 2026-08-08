@@ -1,7 +1,7 @@
 # Remaining Implementation Roadmap — Codex Handoff
 
 **Date:** 2026-08-09
-**Starting Point:** 47/80 rules implemented, 457 tests passing, commit `328760f`
+**Current checkpoint:** 48 adapters, 503 tests passing after Phase 4B, commit `354728b`
 **Goal:** 80/80 rules fully implemented, all providers live-validated, ≥1,200 tests
 **Related:** [CURRENT_RULE_MATRIX.csv](CURRENT_RULE_MATRIX.csv) | [BLOCKERS_AND_CREDENTIALS.md](BLOCKERS_AND_CREDENTIALS.md)
 
@@ -25,7 +25,8 @@ PARTIAL Gap Closure (WS3) ────► Manual Review (WS9) ────► Au
 
 ## Workstream 1: Phase 4B — Rule 74 (Snapshot Diff)
 
-**Priority:** P0 — starts immediately
+**Status:** COMPLETE on 2026-08-09. See `docs/audit/PHASE4B_COMPLETION_REPORT.md`.
+**Priority:** Completed
 **Depends on:** Nothing (stateless except for snapshot storage)
 **Unlocks:** 1 rule → brings NEW_AUTO from 1 → 0
 
@@ -79,6 +80,15 @@ PARTIAL Gap Closure (WS3) ────► Manual Review (WS9) ────► Au
 
 ### 1.3 Estimated Effort
 ~4-6 hours (snapshot format design, diff engine, check function, 15-20 tests)
+
+### 1.4 Delivered state
+
+The earlier session-ID/JSON sketch above is retained as historical planning
+context and superseded by the portable `audit-snapshot-v1.json.gz` contract.
+Rule 74 is now `EXISTING_PARTIAL`; `NEW_AUTO` is zero. A missing baseline is
+`NOT_CHECKED + UNKNOWN`, while a validated identical baseline executes and can
+PASS. The production finalize path registers both the current snapshot and,
+when a baseline is valid, `crawl-diff.csv`.
 
 ---
 
