@@ -163,6 +163,19 @@ def check_crawl_budget_waste(
                 severity="Warning",
                 confidence=0.9,
             ))
+    logs = data.get("server_logs")
+    if isinstance(logs, dict):
+        from audit_rules.providers.server_log_provider import normalize_log_target
+
+        hit_counts = logs.get("waste_bot_counts") or {}
+        for finding in findings:
+            hits = int(hit_counts.get(normalize_log_target(finding.url), 0) or 0)
+            if hits:
+                finding.evidence += f"; bot_hits={hits}"
+                finding.finding_detail += f"; observed_bot_hits={hits}"
+        raise PartialExecutionError(
+            "Crawl URL patterns and server-log frequency checked; GSC Crawl Stats evidence unavailable",
+            findings)
     return findings
 
 

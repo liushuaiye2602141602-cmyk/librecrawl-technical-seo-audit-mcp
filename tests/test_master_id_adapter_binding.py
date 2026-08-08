@@ -123,6 +123,8 @@ MASTER_ID_ADAPTER_MAP = {
     # Phase 7 (GA4)
     34: "check_gsc_ga4_config",
     35: "check_event_conversion_tracking",
+    # Phase 8 (server logs)
+    33: "check_server_log_analysis",
 }
 
 
@@ -281,12 +283,14 @@ class TestAdapterRegistration:
             31, 77,
         } | {
             34, 35,
+        } | {
+            33,
         }
 
         # Get all registered adapter rule_ids
         adapter_rule_ids = set(harness._adapters.keys())
-        assert len(adapter_rule_ids) == 63, (
-            f"Expected 63 adapters through Phase 7, "
+        assert len(adapter_rule_ids) == 64, (
+            f"Expected 64 adapters through Phase 8, "
             f"got {len(adapter_rule_ids)}: {adapter_rule_ids}"
         )
 
@@ -348,8 +352,8 @@ class TestAdapterRegistration:
         harness = CompatibilityHarness(registry)
 
         func_ids = {id(f) for f in harness._adapters.values()}
-        assert len(func_ids) == 63, (
-            f"Expected 63 unique adapter functions through Phase 7, "
+        assert len(func_ids) == 64, (
+            f"Expected 64 unique adapter functions through Phase 8, "
             f"got {len(func_ids)}"
         )
 
@@ -432,7 +436,7 @@ class TestClassificationCrossCheck:
         counts = Counter(r.impl_status.value for r in registry)
 
         assert counts.get("EXISTING_FULL", 0) == 18
-        assert counts.get("EXISTING_PARTIAL", 0) == 41
+        assert counts.get("EXISTING_PARTIAL", 0) == 42
         assert counts.get("NEW_AUTO", 0) == 0
-        assert counts.get("NEW_EXTERNAL_DATA", 0) == 8
+        assert counts.get("NEW_EXTERNAL_DATA", 0) == 7
         assert counts.get("NEW_MANUAL", 0) == 13

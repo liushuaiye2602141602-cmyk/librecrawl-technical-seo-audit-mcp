@@ -114,6 +114,8 @@ def _import_all():
         "semrush": ["check_backlink_overview", "check_lost_backlinks"],
         # Phase 7: Google Analytics 4
         "ga4": ["check_gsc_ga4_config", "check_event_conversion_tracking"],
+        # Phase 8: server access logs
+        "server_logs": ["check_server_log_analysis"],
     }
     for mod, names in modules.items():
         _IMPORTS.update(_lazy_import(mod, names))
@@ -161,5 +163,7 @@ __all__ = [
     "check_backlink_overview", "check_lost_backlinks",
     # Phase 7
     "check_gsc_ga4_config", "check_event_conversion_tracking",
+    # Phase 8
+    "check_server_log_analysis",
     "get_check",
 ]

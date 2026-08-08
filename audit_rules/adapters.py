@@ -83,6 +83,10 @@ _PHASE6_CHECKS: dict[str, Callable] = {}
 _PHASE7_CHECKS_LOADED = False
 _PHASE7_CHECKS: dict[str, Callable] = {}
 
+# Phase 8: server-log checks
+_PHASE8_CHECKS_LOADED = False
+_PHASE8_CHECKS: dict[str, Callable] = {}
+
 
 def _load_phase2_checks() -> dict[str, Callable]:
     """Import Phase 2 check functions lazily."""
@@ -280,6 +284,21 @@ def _load_phase7_checks() -> dict[str, Callable]:
     return _PHASE7_CHECKS
 
 
+def _load_phase8_checks() -> dict[str, Callable]:
+    global _PHASE8_CHECKS_LOADED, _PHASE8_CHECKS
+    if _PHASE8_CHECKS_LOADED:
+        return _PHASE8_CHECKS
+    try:
+        from audit_rules.checks import get_check
+        check = get_check("check_server_log_analysis")
+        if check is not None:
+            _PHASE8_CHECKS["server_log_analysis"] = check
+        _PHASE8_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE8_CHECKS
+
+
 @dataclass
 class CompatibilityHarness:
     """Binds EXISTING_FULL (18), EXISTING_PARTIAL (13), and performance (8)
@@ -358,6 +377,8 @@ class CompatibilityHarness:
         self._adapters.update(phase6)
         phase7 = _load_phase7_checks()
         self._adapters.update(phase7)
+        phase8 = _load_phase8_checks()
+        self._adapters.update(phase8)
 
     def run(
         self,
