@@ -83,17 +83,18 @@ class RuleRunner:
             available_providers.add("SnapshotBaseline")
         for name, provider in self.providers.items():
             if provider.is_available():
-                available_providers.add(name)
+                provider_name = provider.name
+                available_providers.add(provider_name)
                 try:
                     provider.enrich_site(site_ctx)
                     for pctx in page_contexts:
                         provider.enrich_page(pctx)
                 except Exception:
                     # Provider failed → mark unavailable, rules will get NOT_CHECKED
-                    available_providers.discard(name)
+                    available_providers.discard(provider_name)
 
         # Step 3: Populate PSI cache if PageSpeedDataProvider is available
-        psi_provider = self.providers.get("PageSpeedInsights")
+        psi_provider = self.providers.get("PageSpeed API")
         if psi_provider is not None and psi_provider.is_available():
             strategies = psi_provider._strategies
             sampled = select_performance_sample(
@@ -102,12 +103,14 @@ class RuleRunner:
             # Primary strategy (mobile) for all rule checks
             primary_strategy = strategies[0]
             sampled_urls = [ctx.url for ctx, reason in sampled]
+            successful_snapshots = 0
             for url in sampled_urls:
                 snap = psi_provider.get_snapshot(url, primary_strategy)
-                if snap is None:
-                    # Provider became unavailable mid-run
-                    available_providers.discard("PageSpeedInsights")
-                    break
+                if snap is not None and snap.psi_status == "success":
+                    successful_snapshots += 1
+            if successful_snapshots == 0:
+                # Provider/network/quota failure is not an SEO PASS or FAIL.
+                available_providers.discard("PageSpeed API")
             # Inject cache + strategy into data dict for all checks
             cache = psi_provider._cache.copy() if psi_provider._cache else {}
             existing_data["_psi_cache"] = cache

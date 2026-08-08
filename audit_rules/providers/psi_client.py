@@ -57,6 +57,8 @@ def fetch_pagespeed(
     api_key = api_key or _get_api_key()
     if not api_key:
         return {"error": "PAGESPEED_API_KEY not set."}
+    if strategy not in {"mobile", "desktop"}:
+        return {"error": f"Invalid PSI strategy: {strategy}"}
 
     params = {
         "url": url,
@@ -74,14 +76,17 @@ def fetch_pagespeed(
         if status == 429:
             return {"error": f"PSI rate limit exceeded (HTTP {status})"}
         if status == 400:
-            return {"error": f"PSI bad request: {e.response.text[:200]}"}
+            return {"error": f"PSI bad request (HTTP {status})"}
         if status >= 500:
             return {"error": f"PSI server error (HTTP {status})"}
-        return {"error": f"PSI HTTP {status}: {e.response.text[:200]}"}
+        return {"error": f"PSI HTTP error ({status})"}
     except httpx.TimeoutException:
         return {"error": f"PSI request timed out after {timeout}s"}
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": f"PSI request failed ({type(e).__name__})"}
+
+    if not isinstance(data, dict):
+        return {"error": "PSI returned an invalid JSON object"}
 
     # ── Normalize response ───────────────────────────────────────────
     lhr = data.get("lighthouseResult", {})

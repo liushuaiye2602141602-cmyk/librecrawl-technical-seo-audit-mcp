@@ -35,7 +35,34 @@ from audit_rules.providers.performance_snapshot import (
 logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────
-PSI_SAMPLE_LIMIT = int(os.getenv("PSI_SAMPLE_LIMIT", "20"))
+DEFAULT_PSI_SAMPLE_LIMIT = 20
+MAX_PSI_SAMPLE_LIMIT = 100
+VALID_PSI_STRATEGIES = ("mobile", "desktop")
+
+
+def _parse_sample_limit(value: object) -> int:
+    """Return a bounded positive PSI sample limit with a safe fallback."""
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_PSI_SAMPLE_LIMIT
+    if parsed <= 0:
+        return DEFAULT_PSI_SAMPLE_LIMIT
+    return min(parsed, MAX_PSI_SAMPLE_LIMIT)
+
+
+def _parse_strategies(value: object) -> list[str]:
+    """Normalize supported strategies, preserving caller order."""
+    raw = str(value or "")
+    strategies: list[str] = []
+    for item in raw.split(","):
+        strategy = item.strip().lower()
+        if strategy in VALID_PSI_STRATEGIES and strategy not in strategies:
+            strategies.append(strategy)
+    return strategies or ["mobile"]
+
+
+PSI_SAMPLE_LIMIT = _parse_sample_limit(os.getenv("PSI_SAMPLE_LIMIT", "20"))
 PSI_STRATEGIES = os.getenv("PSI_STRATEGIES", "mobile")
 MASTER_AUDIT_PSI_ENABLED = os.getenv("MASTER_AUDIT_PSI_ENABLED", "true").lower() == "true"
 
@@ -43,15 +70,13 @@ MASTER_AUDIT_PSI_ENABLED = os.getenv("MASTER_AUDIT_PSI_ENABLED", "true").lower()
 def _is_psi_enabled() -> bool:
     """Check if PSI provider is enabled (respects feature flag)."""
     v3_enabled = os.getenv("MASTER_AUDIT_V3_ENABLED", "false").lower() == "true"
-    return v3_enabled and MASTER_AUDIT_PSI_ENABLED
+    psi_enabled = os.getenv("MASTER_AUDIT_PSI_ENABLED", "true").lower() == "true"
+    return v3_enabled and psi_enabled
 
 
 def _get_strategies() -> list[str]:
     """Parse PSI_STRATEGIES env var into list."""
-    strategies = [s.strip() for s in PSI_STRATEGIES.split(",") if s.strip()]
-    if not strategies:
-        strategies = ["mobile"]
-    return strategies
+    return _parse_strategies(os.getenv("PSI_STRATEGIES", PSI_STRATEGIES))
 
 
 # ── Sampling ───────────────────────────────────────────────────────────────
@@ -237,12 +262,21 @@ class PageSpeedDataProvider(DataProvider):
 
     def __init__(
         self,
-        sample_limit: int = PSI_SAMPLE_LIMIT,
+        sample_limit: int | None = None,
         strategies: list[str] | None = None,
         api_key: str = "",
     ):
-        self._sample_limit = sample_limit
-        self._strategies = strategies or _get_strategies()
+        configured_limit = (
+            os.getenv("PSI_SAMPLE_LIMIT", str(PSI_SAMPLE_LIMIT))
+            if sample_limit is None
+            else sample_limit
+        )
+        self._sample_limit = _parse_sample_limit(configured_limit)
+        self._strategies = (
+            _parse_strategies(",".join(strategies))
+            if strategies is not None
+            else _get_strategies()
+        )
         self._api_key = api_key or os.getenv("PAGESPEED_API_KEY", "")
         self._available: bool | None = None
         # In-memory session cache: {(url, strategy): PerformanceSnapshot}
@@ -250,8 +284,9 @@ class PageSpeedDataProvider(DataProvider):
 
     # ── DataProvider interface ────────────────────────────────────────
 
+    @property
     def name(self) -> str:
-        return "PageSpeedInsights"
+        return "PageSpeed API"
 
     def is_available(self) -> bool:
         """Provider is available when PSI API key is set and flag enabled."""

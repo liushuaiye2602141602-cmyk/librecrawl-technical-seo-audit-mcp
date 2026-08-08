@@ -67,11 +67,16 @@ def _get_runner() -> "RuleRunner":
     """Get or create the cached RuleRunner with default registry."""
     global _runner_cache
     if _runner_cache is None:
+        from audit_rules.providers.pagespeed_provider import PageSpeedDataProvider
         from audit_rules.registry import load_registry
         from audit_rules.runner import RuleRunner
 
         registry = load_registry()
-        _runner_cache = RuleRunner(registry)
+        pagespeed = PageSpeedDataProvider()
+        _runner_cache = RuleRunner(
+            registry,
+            providers={pagespeed.name: pagespeed},
+        )
     return _runner_cache
 
 
