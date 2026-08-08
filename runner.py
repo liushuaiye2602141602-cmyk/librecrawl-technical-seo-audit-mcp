@@ -486,6 +486,30 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
                     "rows": len(coverage_rows),
                     "findings": len(v3_findings),
                 })
+
+                # Generate master-audit-tasks.csv from all findings (Rule 40)
+                try:
+                    from audit_rules.checks.audit_deliverables import (
+                        generate_task_csv,
+                    )
+                    from audit_rules.integration import _get_runner
+                    runner_obj = _get_runner()
+                    task_csv = generate_task_csv(
+                        findings=v3_findings,
+                        registry=runner_obj.registry,
+                        domain=domain,
+                        timestamp=timestamp,
+                    )
+                    if task_csv:
+                        task_path = REPORTS_DIR / f"{domain}-{timestamp}.master-audit-tasks.csv"
+                        task_path.write_text(task_csv, encoding="utf-8")
+                        state.add_artifact(sid, "task_csv", task_path)
+                        state.log_event(sid, "v3_task_csv_generated", {
+                            "rows": task_csv.count("\n") - 1,
+                        })
+                except Exception:
+                    # Task CSV is additive — failure must not impact audit
+                    pass
     except Exception as e:
         # V3 shadow pipeline is strictly additive — a failure here MUST NOT
         # impact the existing audit artifacts (MD, PDF, CSVs, zip).

@@ -1,8 +1,8 @@
 """RuleRunner — orchestrates rule evaluation across site + pages.
 
-Phase 1: Uses LibreCrawlDataProvider (existing export data only, no HTTP
-re-fetch) + CompatibilityHarness (18 EXISTING_FULL adapters) +
-CoverageManager (80-row coverage matrix).
+Phase 1+2: Uses LibreCrawlDataProvider (existing export data only, no HTTP
+re-fetch) + CompatibilityHarness (18 Phase 1 EXISTING_FULL + 14 Phase 2
+local adapters) + CoverageManager (80-row coverage matrix).
 
 Usage:
     runner = RuleRunner(registry, providers, harness)
@@ -83,8 +83,8 @@ class RuleRunner:
                     # Provider failed → mark unavailable, rules will get NOT_CHECKED
                     available_providers.discard(name)
 
-        # Step 3: Run adapters to get findings
-        findings = self.harness.run_existing_full(
+        # Step 3: Run adapters to get findings (Phase 1 + Phase 2)
+        findings = self.harness.run(
             site_ctx, page_contexts, existing_data,
         )
 

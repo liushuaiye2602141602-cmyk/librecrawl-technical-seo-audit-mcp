@@ -1,20 +1,23 @@
-"""Phase 1 Compatibility Adapters — bind existing check logic to registry rules.
+"""Phase 1+2 Compatibility Adapters — bind existing + new check logic to registry rules.
 
-Design (Requirement 8):
-  - 18 EXISTING_FULL rules use adapter/binding to existing logic, NOT reimplementation.
-  - Do NOT modify existing check implementations (no deletions, no deprecation warnings).
-  - Feature flag MASTER_AUDIT_V3_ENABLED defaults to False (shadow/parallel mode).
-  - Adapters extract findings from existing code output and map to Finding objects.
+Phase 1 (18 EXISTING_FULL):
+  - Adapters bound to existing check implementations via adapter/binding.
+  - Do NOT modify existing check implementations.
+
+Phase 2 (14 EXISTING_PARTIAL → enhanced):
+  - New local checks in audit_rules.checks/ using only existing LibreCrawl data.
+  - Registered alongside Phase 1 adapters in the same harness.
+  - Rules without check implementations remain NOT_CHECKED via CoverageManager.
 
 Each adapter:
-  1. Takes SiteContext + PageContext(s) + existing check output data
+  1. Takes (rule, site_ctx, page_contexts, data)
   2. Produces list[Finding] in the unified format
   3. Is registered by rule_id for dispatch by RuleRunner
 
 Usage:
     registry = load_registry()
     harness = CompatibilityHarness(registry)
-    findings = harness.run_existing_full(site_ctx, page_contexts, existing_data)
+    findings = harness.run(site_ctx, page_contexts, existing_data)
 """
 
 from typing import Optional, Callable
@@ -26,6 +29,47 @@ from audit_rules.context import SiteContext, PageContext
 
 # Type alias for adapter function signature
 AdapterFunc = Callable[..., list[Finding]]
+
+# Lazy import for Phase 2 checks (avoids import errors when checks/ is being built)
+_PHASE2_CHECKS_LOADED = False
+_PHASE2_CHECKS: dict[str, Callable] = {}
+
+
+def _load_phase2_checks() -> dict[str, Callable]:
+    """Import Phase 2 check functions lazily."""
+    global _PHASE2_CHECKS_LOADED, _PHASE2_CHECKS
+    if _PHASE2_CHECKS_LOADED:
+        return _PHASE2_CHECKS
+    try:
+        from audit_rules.checks import get_check
+        checks_to_load = {
+            # NOTE: Rule 40 (audit_deliverables) is NOT registered here.
+            # generate_task_csv() has a different signature (findings, registry,
+            # domain, timestamp) and is called from integration.py after
+            # all findings are collected; it produces the master-audit-tasks.csv
+            # artifact rather than individual Findings.
+            "breadcrumb_schema": "check_breadcrumb",
+            "pagination_faceted_nav": "check_pagination",
+            "thin_content": "check_thin_content",
+            "duplicate_content": "check_near_duplicate",
+            "schema_errors_conflicts": "check_schema_conflict",
+            "seo_plugin_conflicts": "check_seo_plugin_conflict",
+            "permalink_rewrite": "check_permalink",
+            "url_normalization": "check_url_normalization",
+            "redirect_target_relevance": "check_redirect_relevance",
+            "language_code_match": "check_language_hreflang_match",
+            "form_link_accessibility": "check_form_accessibility",
+            "schema_visible_content_match": "check_schema_vs_visible",
+            "image_alt_link_semantics": "check_image_alt_quality",
+        }
+        for rule_id, check_name in checks_to_load.items():
+            fn = get_check(check_name)
+            if fn is not None:
+                _PHASE2_CHECKS[rule_id] = fn
+        _PHASE2_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE2_CHECKS
 
 
 @dataclass
@@ -41,7 +85,8 @@ class CompatibilityHarness:
     _adapters: dict[str, AdapterFunc] = field(default_factory=dict)
 
     def __post_init__(self):
-        """Register all 18 EXISTING_FULL adapters."""
+        """Register Phase 1 (18 EXISTING_FULL) + Phase 2 (14 EXISTING_PARTIAL) adapters."""
+        # ── Phase 1: EXISTING_FULL adapters ──────────────────────────────
         self._adapters = {
             # 1: robots.txt existence + rules
             "robots_txt_exists": _adapter_robots_txt,
@@ -80,26 +125,20 @@ class CompatibilityHarness:
             # 58: hreflang indexability
             "hreflang_indexability": _adapter_hreflang_indexability,
         }
+        # ── Phase 2: EXISTING_PARTIAL local checks ───────────────────────
+        phase2 = _load_phase2_checks()
+        self._adapters.update(phase2)
 
-    def run_existing_full(
+    def run(
         self,
         site_ctx: SiteContext,
         page_contexts: list[PageContext],
         existing_data: dict,
     ) -> list[Finding]:
-        """Run all 18 EXISTING_FULL adapters against provided data.
-
-        Args:
-            site_ctx: Site-level context (robots.txt, sitemap, profile, etc.)
-            page_contexts: All page contexts from the crawl
-            existing_data: Dict with keys matching existing check output sections:
-                - site_check: _site_check() result dict
-                - build_report: _build_report() result summary
-                - extended_checks: extended_checks results dict
-                - crawl: raw crawl result dict
+        """Run all registered adapters (Phase 1 EXISTING_FULL + Phase 2 local checks).
 
         Returns:
-            List of Finding objects for all executed rules
+            List of Finding objects for all executed rules.
         """
         all_findings: list[Finding] = []
         for rule in self.registry:

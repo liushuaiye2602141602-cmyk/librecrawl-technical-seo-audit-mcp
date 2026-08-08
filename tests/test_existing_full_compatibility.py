@@ -1,7 +1,7 @@
-"""Task 5: 18 EXISTING_FULL compatibility harness tests.
+"""Phase 1+2 compatibility harness tests.
 
-Verifies that each of the 18 EXISTING_FULL rules has a working adapter
-that binds to existing check logic and produces Finding objects correctly.
+Verifies that each of the 32 registered adapters (18 Phase 1 EXISTING_FULL +
+14 Phase 2 local checks) produces Finding objects correctly.
 
 Design constraints (Requirement 8):
   - Adapters use existing data structures (no reimplementation)
@@ -151,13 +151,21 @@ def sample_pages():
 # ============================================================
 
 class TestAdapterRegistration:
-    """Verify all 18 EXISTING_FULL rules have registered adapters."""
+    """Verify all Phase 1 (18) + Phase 2 (13) rules have registered adapters.
 
-    EXISTING_FULL_IDS = {1, 3, 4, 6, 7, 8, 9, 11, 14, 15, 26, 27, 29, 30, 41, 42, 45, 58}
+    Rule 40 (audit_deliverables) is handled at the integration level,
+    not as a per-rule adapter — generate_task_csv() has a different signature.
+    """
 
-    def test_all_18_adapters_registered(self, harness):
-        """Each EXISTING_FULL rule must have a registered adapter."""
-        for audit_id in self.EXISTING_FULL_IDS:
+    PHASE1_IDS = {1, 3, 4, 6, 7, 8, 9, 11, 14, 15, 26, 27, 29, 30, 41, 42, 45, 58}
+    # Rule 40 (audit_deliverables) is NOT an adapter — generate_task_csv()
+    # is called from integration.py with a different signature
+    PHASE2_IDS = {10, 12, 16, 17, 28, 37, 38, 49, 50, 59, 70, 78, 79}
+    ALL_ADAPTER_IDS = PHASE1_IDS | PHASE2_IDS  # 31 rules with adapters
+
+    def test_all_adapters_registered(self, harness):
+        """Each rule with an adapter must have it registered (32 total)."""
+        for audit_id in self.ALL_ADAPTER_IDS:
             rule = None
             for r in harness.registry:
                 if r.audit_id == audit_id:
@@ -169,13 +177,30 @@ class TestAdapterRegistration:
             )
 
     def test_no_extra_adapters(self, harness):
-        """Only EXISTING_FULL rules should have adapters."""
+        """Only Phase 1 + Phase 2 rules should have adapters."""
         for rule in harness.registry:
-            if rule.audit_id in self.EXISTING_FULL_IDS:
+            if rule.audit_id in self.ALL_ADAPTER_IDS:
                 continue
             assert rule.rule_id not in harness._adapters, (
-                f"Non-EXISTING_FULL rule {rule.audit_id} has adapter"
+                f"Unexpected rule {rule.audit_id} ({rule.rule_id}) has adapter"
             )
+
+    def test_phase2_count(self, harness):
+        """Exactly 13 Phase 2 adapters are registered (Rule 40 is integration-level)."""
+        phase2_in_adapters = [
+            rule_id for rule_id in harness._adapters
+            if any(r.audit_id in self.PHASE2_IDS for r in harness.registry
+                   if r.rule_id == rule_id)
+        ]
+        assert len(phase2_in_adapters) == 13, (
+            f"Expected 13 Phase 2 adapters, got {len(phase2_in_adapters)}"
+        )
+
+    def test_total_adapter_count(self, harness):
+        """Exactly 31 adapters total (18 Phase 1 + 13 Phase 2)."""
+        assert len(harness._adapters) == 31, (
+            f"Expected 31 total adapters, got {len(harness._adapters)}"
+        )
 
 
 # ============================================================
@@ -412,15 +437,15 @@ class TestAdapterSchemaCoverage:
 
 
 # ============================================================
-# Test: harness.run_existing_full integration
+# Test: harness.run integration
 # ============================================================
 
 class TestHarnessIntegration:
-    """Verify the harness.run_existing_full() orchestrator."""
+    """Verify the harness.run() orchestrator."""
 
-    def test_run_existing_full_produces_findings(self, harness, sample_site_ctx, sample_pages):
-        """run_existing_full with realistic data produces findings."""
-        findings = harness.run_existing_full(sample_site_ctx, sample_pages, {})
+    def test_run_produces_findings(self, harness, sample_site_ctx, sample_pages):
+        """harness.run() with realistic data produces findings."""
+        findings = harness.run(sample_site_ctx, sample_pages, {})
         assert len(findings) > 0, "Expected at least some findings from 18 adapters"
 
         # Verify all findings have required fields
@@ -430,8 +455,13 @@ class TestHarnessIntegration:
             assert f.category
             assert f.severity
 
-    def test_run_existing_full_perfect_site_no_findings(self, harness):
-        """A perfect site with no issues should produce zero findings."""
+    def test_run_perfect_site_no_issues(self, harness):
+        """A perfect site should have zero ERROR/WARNING/OPPORTUNITY findings.
+
+        INFO-severity findings (coverage gap documentation) are acceptable
+        — they document what CANNOT be checked with available data, and
+        are not actual audit issues.
+        """
         from audit_rules.context import SiteContext, PageContext
         perfect_site = SiteContext(
             base_url="https://perfect.com",
@@ -462,12 +492,13 @@ class TestHarnessIntegration:
                 ],
             ),
         ]
-        findings = harness.run_existing_full(perfect_site, perfect_pages, {})
-        # A perfect site should have zero or very few findings
-        # (schema_coverage might fire if <30% which is 1/1=100% so no)
-        assert len(findings) == 0, (
-            f"Expected 0 findings for perfect site, got {len(findings)}: "
-            f"{[f.rule_id for f in findings]}"
+        findings = harness.run(perfect_site, perfect_pages, {})
+        # Filter out INFO-severity findings (coverage gap documentation)
+        actionable = [f for f in findings if f.severity.lower() != "info"]
+        assert len(actionable) == 0, (
+            f"Expected 0 actionable findings for perfect site, "
+            f"got {len(actionable)}: "
+            f"{[(f.rule_id, f.severity, f.detected_value[:80]) for f in actionable]}"
         )
 
     def test_each_adapter_is_callable(self, harness, sample_site_ctx, sample_pages):

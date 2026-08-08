@@ -1,11 +1,12 @@
-"""Phase 1.1 — Master Audit ID → Adapter Binding Verification.
+"""Phase 1+2 — Master Audit ID → Adapter Binding Verification.
 
-Verifies that the 18 EXISTING_FULL adapter rule_ids in compatibility harness
-exactly correspond to the approved Master Audit IDs, and that the mapping
-is consistent across CSV source of truth, registry RULE_ID_MAP, and adapters.
+Verifies that the 31 adapter rule_ids (18 Phase 1 EXISTING_FULL + 13 Phase 2
+local checks) in compatibility harness exactly correspond to the approved
+Master Audit IDs, and that the mapping is consistent across CSV source of
+truth, registry RULE_ID_MAP, and adapters.
 
-MUST MATCH:
-  EXISTING_FULL_MASTER_IDS == {1,3,4,6,7,8,9,11,14,15,26,27,29,30,41,42,45,58}
+Phase 1 (18): {1,3,4,6,7,8,9,11,14,15,26,27,29,30,41,42,45,58}
+Phase 2 (13): {10,12,16,17,28,37,38,49,50,59,70,78,79}
 """
 
 import sys
@@ -48,6 +49,7 @@ MASTER_ID_RULE_ID_MAP = {
 
 # Expected adapter function name for each Master Audit ID
 MASTER_ID_ADAPTER_MAP = {
+    # Phase 1 (18 EXISTING_FULL — adapter functions in adapters.py)
     1: "_adapter_robots_txt",
     3: "_adapter_noindex_nofollow",
     4: "_adapter_crawl_errors",
@@ -66,6 +68,20 @@ MASTER_ID_ADAPTER_MAP = {
     42: "_adapter_sitemap_indexability",
     45: "_adapter_orphan_pages",
     58: "_adapter_hreflang_indexability",
+    # Phase 2 (13 local checks — functions in audit_rules.checks/)
+    10: "check_breadcrumb",
+    12: "check_pagination",
+    16: "check_thin_content",
+    17: "check_near_duplicate",
+    28: "check_schema_conflict",
+    37: "check_seo_plugin_conflict",
+    38: "check_permalink",
+    49: "check_url_normalization",
+    50: "check_redirect_relevance",
+    59: "check_language_hreflang_match",
+    70: "check_form_accessibility",
+    78: "check_schema_vs_visible",
+    79: "check_image_alt_quality",
 }
 
 
@@ -207,10 +223,16 @@ class TestAdapterRegistration:
         registry = load_registry()
         harness = CompatibilityHarness(registry)
 
+        # Expected set: 18 Phase 1 + 13 Phase 2 = 31
+        ALL_ADAPTER_MASTER_IDS = EXISTING_FULL_MASTER_IDS | {
+            10, 12, 16, 17, 28, 37, 38, 49, 50, 59, 70, 78, 79,
+        }
+
         # Get all registered adapter rule_ids
         adapter_rule_ids = set(harness._adapters.keys())
-        assert len(adapter_rule_ids) == 18, (
-            f"Expected 18 adapters, got {len(adapter_rule_ids)}: {adapter_rule_ids}"
+        assert len(adapter_rule_ids) == 31, (
+            f"Expected 31 adapters (18 P1 + 13 P2), "
+            f"got {len(adapter_rule_ids)}: {adapter_rule_ids}"
         )
 
         # Map to Master Audit IDs by finding each rule_id in the registry
@@ -222,10 +244,10 @@ class TestAdapterRegistration:
             )
             adapted_master_ids.add(rule_id_to_audit_id[rule_id])
 
-        assert adapted_master_ids == EXISTING_FULL_MASTER_IDS, (
+        assert adapted_master_ids == ALL_ADAPTER_MASTER_IDS, (
             f"Adapter Master ID mismatch:\n"
-            f"  In harness, not in expected: {adapted_master_ids - EXISTING_FULL_MASTER_IDS}\n"
-            f"  Expected, not in harness: {EXISTING_FULL_MASTER_IDS - adapted_master_ids}"
+            f"  In harness, not in expected: {adapted_master_ids - ALL_ADAPTER_MASTER_IDS}\n"
+            f"  Expected, not in harness: {ALL_ADAPTER_MASTER_IDS - adapted_master_ids}"
         )
 
     def test_registry_existing_full_matches_harness(self):
@@ -271,8 +293,9 @@ class TestAdapterRegistration:
         harness = CompatibilityHarness(registry)
 
         func_ids = {id(f) for f in harness._adapters.values()}
-        assert len(func_ids) == 18, (
-            f"Expected 18 unique adapter functions, got {len(func_ids)}"
+        assert len(func_ids) == 31, (
+            f"Expected 31 unique adapter functions (18 P1 + 13 P2), "
+            f"got {len(func_ids)}"
         )
 
     def test_adapter_functions_match_expected_names(self):
