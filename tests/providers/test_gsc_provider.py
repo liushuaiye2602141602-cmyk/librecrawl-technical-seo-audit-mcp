@@ -93,6 +93,20 @@ def test_collects_comparable_windows_sitemaps_and_deterministic_inspection_sampl
     assert pages[1].gsc_data["inspection"]["googleCanonical"] == "https://example.com/a"
 
 
+def test_rejects_cross_site_property_before_calling_gsc():
+    from audit_rules.providers.gsc_provider import GSCDataProvider
+
+    client = StubClient()
+    provider = GSCDataProvider(
+        access_token="token", site_url="sc-domain:other.example", client=client)
+    shared = {}
+
+    assert provider.collect(SiteContext(base_url="https://example.com"), _pages(), shared) is False
+    assert client.search_calls == []
+    assert client.inspect_calls == []
+    assert shared["gsc"]["errors"] == ["site_property:SiteMismatch"]
+
+
 def test_partial_inspection_success_is_preserved_without_leaking_error_detail():
     from audit_rules.providers.gsc_provider import GSCDataProvider
 

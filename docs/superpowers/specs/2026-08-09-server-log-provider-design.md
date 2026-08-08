@@ -6,7 +6,7 @@ Add a local, streaming server-access-log provider that turns Apache/Nginx combin
 
 ## Input and safety
 
-`MASTER_AUDIT_SERVER_LOGS_ENABLED`, `SERVER_LOG_PATH`, and `SERVER_LOG_MAX_LINES` configure an explicitly named file. The provider performs read-only streaming, caps processed lines, counts malformed lines, and stores aggregates only. Raw user agents, client IPs, query values, and log lines are not copied into audit artifacts.
+`MASTER_AUDIT_SERVER_LOGS_ENABLED`, `SERVER_LOG_PATH`, `SERVER_LOG_SITE_HOST`, and `SERVER_LOG_MAX_LINES` configure an explicitly named, host-bound file. The exact audited hostname must match the manifest before the provider opens it. The provider performs read-only streaming, caps processed lines, counts malformed lines, and stores aggregates only. Raw user agents, client IPs, query values, and log lines are not copied into audit artifacts.
 
 ## Normalization
 

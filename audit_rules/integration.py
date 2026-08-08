@@ -63,39 +63,54 @@ def disable_v3():
 _runner_cache: Optional["RuleRunner"] = None
 
 
+def _build_runner() -> "RuleRunner":
+    """Build an audit-scoped runner and fresh provider/client configuration."""
+    from audit_rules.providers.gsc_provider import GSCDataProvider
+    from audit_rules.providers.ga4_provider import GA4DataProvider
+    from audit_rules.providers.pagespeed_provider import PageSpeedDataProvider
+    from audit_rules.providers.semrush_provider import SemrushDataProvider
+    from audit_rules.providers.server_log_provider import ServerLogDataProvider
+    from audit_rules.providers.wordpress_privileged_provider import WordPressPrivilegedProvider
+    from audit_rules.providers.render_snapshot_provider import RenderSnapshotProvider
+    from audit_rules.providers.availability_snapshot_provider import AvailabilitySnapshotProvider
+    from audit_rules.registry import load_registry
+    from audit_rules.runner import RuleRunner
+
+    registry = load_registry()
+    pagespeed = PageSpeedDataProvider()
+    gsc = GSCDataProvider()
+    semrush = SemrushDataProvider()
+    ga4 = GA4DataProvider()
+    server_logs = ServerLogDataProvider()
+    wordpress = WordPressPrivilegedProvider()
+    rendered = RenderSnapshotProvider()
+    availability = AvailabilitySnapshotProvider()
+    return RuleRunner(
+        registry,
+        providers={pagespeed.name: pagespeed, gsc.name: gsc,
+                   semrush.name: semrush, ga4.name: ga4,
+                   server_logs.name: server_logs,
+                   wordpress.name: wordpress,
+                   rendered.name: rendered,
+                   availability.name: availability},
+    )
+
+
 def _get_runner() -> "RuleRunner":
-    """Get or create the cached RuleRunner with default registry."""
+    """Return the most recently used runner, building one when needed."""
     global _runner_cache
     if _runner_cache is None:
-        from audit_rules.providers.gsc_provider import GSCDataProvider
-        from audit_rules.providers.ga4_provider import GA4DataProvider
-        from audit_rules.providers.pagespeed_provider import PageSpeedDataProvider
-        from audit_rules.providers.semrush_provider import SemrushDataProvider
-        from audit_rules.providers.server_log_provider import ServerLogDataProvider
-        from audit_rules.providers.wordpress_privileged_provider import WordPressPrivilegedProvider
-        from audit_rules.providers.render_snapshot_provider import RenderSnapshotProvider
-        from audit_rules.providers.availability_snapshot_provider import AvailabilitySnapshotProvider
-        from audit_rules.registry import load_registry
-        from audit_rules.runner import RuleRunner
+        _runner_cache = _build_runner()
+    return _runner_cache
 
-        registry = load_registry()
-        pagespeed = PageSpeedDataProvider()
-        gsc = GSCDataProvider()
-        semrush = SemrushDataProvider()
-        ga4 = GA4DataProvider()
-        server_logs = ServerLogDataProvider()
-        wordpress = WordPressPrivilegedProvider()
-        rendered = RenderSnapshotProvider()
-        availability = AvailabilitySnapshotProvider()
-        _runner_cache = RuleRunner(
-            registry,
-            providers={pagespeed.name: pagespeed, gsc.name: gsc,
-                       semrush.name: semrush, ga4.name: ga4,
-                       server_logs.name: server_logs,
-                       wordpress.name: wordpress,
-                       rendered.name: rendered,
-                       availability.name: availability},
-        )
+
+def _runner_for_audit() -> "RuleRunner":
+    """Use fresh real providers per audit while preserving injected test runners."""
+    global _runner_cache
+    from audit_rules.runner import RuleRunner
+
+    if _runner_cache is None or isinstance(_runner_cache, RuleRunner):
+        _runner_cache = _build_runner()
     return _runner_cache
 
 
@@ -130,7 +145,7 @@ def run_v3_pipeline(
 
     from audit_rules.writer import write_coverage_csv_to_string
 
-    runner = _get_runner()
+    runner = _runner_for_audit()
     pipeline_data = dict(existing_data or {})
     pipeline_data.setdefault("deliverable_pipeline_available", True)
 

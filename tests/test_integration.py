@@ -157,15 +157,17 @@ class TestEndToEndIntegration:
         ids = [int(r["audit_id"]) for r in rows]
         assert set(ids) == set(range(1, 81))
 
-    def test_runner_cache_reuse(self, sample_export):
-        """Runner should be cached across calls (performance optimization)."""
+    def test_each_audit_uses_fresh_provider_instances(self, sample_export):
+        """Audit-scoped clients/configuration must not leak across sites or runs."""
         from audit_rules.integration import enable_v3, run_v3_pipeline, _get_runner
         enable_v3()
 
+        run_v3_pipeline(export_data=sample_export)
         runner1 = _get_runner()
         run_v3_pipeline(export_data=sample_export)
         runner2 = _get_runner()
-        assert runner1 is runner2  # Same cached instance
+        assert runner1 is not runner2
+        assert runner1.providers["GSC API"] is not runner2.providers["GSC API"]
 
     def test_enable_disable_toggle(self, sample_export):
         from audit_rules.integration import enable_v3, disable_v3, run_v3_pipeline

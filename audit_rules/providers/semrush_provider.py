@@ -74,6 +74,14 @@ class SemrushDataProvider(DataProvider):
             payload["errors"].append("target:ValueError")
             self.runtime_available = False
             return False
+        audited_host = (urlsplit(site_ctx.base_url).hostname or "").lower().rstrip(".")
+        target_host = target.strip().lower().rstrip(".")
+        if (not audited_host or "://" in target_host
+                or not (audited_host == target_host
+                        or audited_host.endswith("." + target_host))):
+            payload["errors"].append("target:SiteMismatch")
+            self.runtime_available = False
+            return False
 
         client = self._get_client()
         successes = 0

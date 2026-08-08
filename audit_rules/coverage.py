@@ -80,7 +80,7 @@ class CoverageManager:
 
             # Count eligible pages
             eligible = self._count_eligible(rule, site_ctx, page_contexts)
-            evaluated = self._count_evaluated(rule, exec_status, rule_findings, total_pages)
+            evaluated = self._count_evaluated(rule, exec_status, rule_findings, eligible)
 
             coverage_pct = 0.0
             if eligible > 0:
@@ -182,28 +182,13 @@ class CoverageManager:
         # Has findings → determine result from findings
         result = self._derive_result_from_findings(findings)
 
-        # Determine execution level
-        if rule.scope == Scope.SITE:
-            # Site-scoped rules are always FULL (they check one thing: the site)
-            exec_status = ExecutionStatus.EXECUTED_FULL
-        elif rule.scope in (Scope.PAGE, Scope.TEMPLATE):
-            # Check if all eligible pages were evaluated
-            eligible = self._count_eligible(rule, None, page_contexts)  # site_ctx not needed for PAGE scope
-            if eligible > 0 and len(findings) >= eligible:
-                exec_status = ExecutionStatus.EXECUTED_FULL
-            elif eligible > 0:
-                exec_status = ExecutionStatus.EXECUTED_PARTIAL  # Case C
-            else:
-                exec_status = ExecutionStatus.EXECUTED_FULL
-        elif rule.scope == Scope.LINK:
-            exec_status = ExecutionStatus.EXECUTED_FULL
-        elif rule.scope == Scope.RELATIONSHIP:
-            exec_status = ExecutionStatus.EXECUTED_FULL
-        else:
-            exec_status = ExecutionStatus.EXECUTED_FULL
-
-        if partial_reason:
-            exec_status = ExecutionStatus.EXECUTED_PARTIAL
+        # Findings are failures, not an execution trace.  A completed adapter
+        # evaluated every eligible entity unless it explicitly reported partial
+        # execution through partially_executed_rule_ids.
+        exec_status = (
+            ExecutionStatus.EXECUTED_PARTIAL
+            if partial_reason else ExecutionStatus.EXECUTED_FULL
+        )
         return exec_status, result, partial_reason
 
     def _check_applicability(self, rule: RuleDefinition, site_ctx: SiteContext) -> str:
@@ -270,7 +255,7 @@ class CoverageManager:
         rule: RuleDefinition,
         exec_status: ExecutionStatus,
         findings: list[Finding],
-        total_pages: int,
+        eligible_count: int,
     ) -> int:
         """Count how many entities were actually evaluated."""
         if exec_status == ExecutionStatus.NOT_CHECKED:
@@ -278,14 +263,18 @@ class CoverageManager:
         if exec_status == ExecutionStatus.NOT_APPLICABLE:
             return 0
 
-        # Count unique URLs in findings
+        if exec_status == ExecutionStatus.EXECUTED_FULL:
+            return eligible_count
+
+        # Partial executions currently expose only affected entities; use that
+        # as a conservative lower bound rather than claiming full evaluation.
         urls = set(f.url for f in findings if f.url)
 
         if rule.scope == Scope.SITE:
-            return 1 if findings else 1  # Site rules always evaluate once
+            return 1 if findings else 0
         elif rule.scope == Scope.PAGE:
-            return len(urls) if urls else total_pages
+            return min(len(urls), eligible_count)
         elif rule.scope == Scope.LINK:
-            return len(findings)
+            return min(len(findings), eligible_count)
         else:
-            return len(urls) if urls else total_pages
+            return min(len(urls), eligible_count)

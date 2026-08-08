@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 import os
 from typing import Any
+from urllib.parse import urlsplit
 
 from audit_rules.context import PageContext, SiteContext
 from audit_rules.providers.base import DataProvider
@@ -22,6 +23,26 @@ def _bounded_positive(value: object, default: int, maximum: int) -> int:
     except (TypeError, ValueError):
         return default
     return min(parsed, maximum) if parsed > 0 else default
+
+
+def _property_matches_site(property_url: str, audited_url: str) -> bool:
+    """Return whether a GSC property is authoritative for the audited URL."""
+    if not audited_url:
+        return True
+    audited = urlsplit(audited_url)
+    host = (audited.hostname or "").lower().rstrip(".")
+    if not host:
+        return False
+    if property_url.lower().startswith("sc-domain:"):
+        domain = property_url.split(":", 1)[1].strip().lower().rstrip(".")
+        return bool(domain and (host == domain or host.endswith("." + domain)))
+    configured = urlsplit(property_url)
+    configured_host = (configured.hostname or "").lower().rstrip(".")
+    if not configured_host or host != configured_host:
+        return False
+    prefix = configured.path or "/"
+    audited_path = audited.path or "/"
+    return audited_path == prefix.rstrip("/") or audited_path.startswith(prefix.rstrip("/") + "/")
 
 
 class GSCDataProvider(DataProvider):
@@ -73,6 +94,10 @@ class GSCDataProvider(DataProvider):
     def collect(self, site_ctx: SiteContext, page_contexts: list[PageContext],
                 shared_data: dict) -> bool:
         """Populate shared and per-page GSC evidence; return runtime availability."""
+        if not _property_matches_site(self._site_url, site_ctx.base_url):
+            shared_data["gsc"] = {"errors": ["site_property:SiteMismatch"]}
+            self.runtime_available = False
+            return False
         client = self._get_client()
         end = self._today - timedelta(days=3)
         current_start = end - timedelta(days=27)

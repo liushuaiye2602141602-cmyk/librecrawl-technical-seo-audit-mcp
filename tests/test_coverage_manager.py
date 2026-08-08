@@ -185,6 +185,30 @@ class TestCoverageStateSemantics:
         assert r1.result_status == ResultStatus.FAIL
         assert r1.finding_count == 1
 
+    def test_completed_page_adapter_evaluates_all_pages_even_with_one_finding(
+        self, mini_registry, sample_site_ctx, sample_page_contexts
+    ):
+        from audit_rules.coverage import CoverageManager
+        from audit_rules.models import Finding
+        from audit_rules.categories import ExecutionStatus
+
+        finding = Finding(
+            audit_id=3, rule_id="page_noindex_nofollow",
+            url="https://example.com/about", category="crawl",
+            priority="Critical", severity="Error", finding_type="Error",
+            scope="PAGE", detected_value="noindex", expected_value="index",
+            evidence="meta robots", finding_detail="one affected page",
+            remediation="remove noindex", owner="SEO",
+            acceptance_criteria="indexable", data_source="LibreCrawl")
+        rows = CoverageManager(mini_registry).compute(
+            sample_site_ctx, sample_page_contexts, [finding],
+            providers_available={"LibreCrawl"}, executed_rule_ids={3})
+        row = next(row for row in rows if row.audit_id == 3)
+        assert row.execution_status == ExecutionStatus.EXECUTED_FULL
+        assert row.eligible_count == 3
+        assert row.evaluated_count == 3
+        assert row.coverage_pct == 100.0
+
     def test_case_c_executed_partial_warning(self, mini_registry, sample_site_ctx, sample_page_contexts):
         """CASE C: EXECUTED_PARTIAL — partially available data, some findings."""
         from audit_rules.coverage import CoverageManager

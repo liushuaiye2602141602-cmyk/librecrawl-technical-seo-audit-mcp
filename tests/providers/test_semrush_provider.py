@@ -42,14 +42,26 @@ def test_collect_uses_configured_target_and_preserves_payload():
 
     client = StubClient()
     provider = SemrushDataProvider(
-        api_key="key", target="configured.example", client=client, lost_link_limit=25)
+        api_key="key", target="example.com", client=client, lost_link_limit=25)
     shared = {}
 
-    assert provider.collect(SiteContext(base_url="https://ignored.example"), [], shared)
+    assert provider.collect(SiteContext(base_url="https://shop.example.com"), [], shared)
     assert client.calls == [
-        ("overview", "configured.example"), ("lost", "configured.example", 25)]
+        ("overview", "example.com"), ("lost", "example.com", 25)]
     assert shared["semrush"]["overview"]["domains_count"] == 20
     assert shared["semrush"]["lost_links"][0]["domain_score"] == 60
+
+
+def test_rejects_cross_site_configured_target_before_calling_semrush():
+    from audit_rules.providers.semrush_provider import SemrushDataProvider
+
+    client = StubClient()
+    provider = SemrushDataProvider(api_key="key", target="other.example", client=client)
+    shared = {}
+
+    assert provider.collect(SiteContext(base_url="https://example.com"), [], shared) is False
+    assert client.calls == []
+    assert shared["semrush"]["errors"] == ["target:SiteMismatch"]
 
 
 def test_collect_derives_target_from_site_and_marks_partial_failure():

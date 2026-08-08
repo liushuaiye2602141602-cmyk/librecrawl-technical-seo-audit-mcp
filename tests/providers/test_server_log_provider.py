@@ -50,11 +50,11 @@ def test_provider_streams_aggregates_and_marks_truncation(tmp_path, monkeypatch)
     path = tmp_path / "access.log"
     path.write_text("\n".join([COMBINED, "bad", COMBINED, COMBINED]), encoding="utf-8")
     monkeypatch.setenv("MASTER_AUDIT_V3_ENABLED", "true")
-    provider = ServerLogDataProvider(path=str(path), max_lines=3)
+    provider = ServerLogDataProvider(path=str(path), site_host="example.com", max_lines=3)
     shared = {}
 
     assert provider.is_available()
-    assert provider.collect(SiteContext(), [], shared)
+    assert provider.collect(SiteContext(base_url="https://example.com"), [], shared)
     logs = shared["server_logs"]
     assert logs["processed_lines"] == 3
     assert logs["valid_lines"] == 2
@@ -73,9 +73,25 @@ def test_missing_file_and_zero_valid_lines_are_unavailable(tmp_path, monkeypatch
 
     path = tmp_path / "bad.log"
     path.write_text("bad\nstill bad\n", encoding="utf-8")
-    provider = ServerLogDataProvider(path=str(path))
+    provider = ServerLogDataProvider(path=str(path), site_host="example.com")
     shared = {}
-    assert provider.collect(SiteContext(), [], shared) is False
+    assert provider.collect(SiteContext(base_url="https://example.com"), [], shared) is False
+
+
+def test_requires_site_manifest_and_rejects_cross_site_logs(tmp_path, monkeypatch):
+    from audit_rules.context import SiteContext
+    from audit_rules.providers.server_log_provider import ServerLogDataProvider
+
+    path = tmp_path / "access.log"
+    path.write_text(COMBINED, encoding="utf-8")
+    monkeypatch.setenv("MASTER_AUDIT_V3_ENABLED", "true")
+    unbound = ServerLogDataProvider(path=str(path))
+    assert unbound.is_available() is False
+
+    provider = ServerLogDataProvider(path=str(path), site_host="other.example")
+    shared = {}
+    assert provider.collect(SiteContext(base_url="https://example.com"), [], shared) is False
+    assert shared["server_logs"]["errors"] == ["site_host:SiteMismatch"]
 
 
 def test_integration_registers_server_log_provider(monkeypatch):

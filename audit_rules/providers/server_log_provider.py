@@ -89,8 +89,10 @@ def parse_log_line(line: str) -> dict | None:
 
 
 class ServerLogDataProvider(DataProvider):
-    def __init__(self, path: str = "", *, max_lines: int | None = None) -> None:
+    def __init__(self, path: str = "", *, site_host: str = "",
+                 max_lines: int | None = None) -> None:
         self._path = Path(path or os.getenv("SERVER_LOG_PATH", ""))
+        self._site_host = (site_host or os.getenv("SERVER_LOG_SITE_HOST", "")).lower().rstrip(".")
         try:
             parsed = int(max_lines if max_lines is not None else os.getenv("SERVER_LOG_MAX_LINES", "1000000"))
         except (TypeError, ValueError):
@@ -106,6 +108,7 @@ class ServerLogDataProvider(DataProvider):
         return bool(
             os.getenv("MASTER_AUDIT_V3_ENABLED", "false").lower() == "true"
             and os.getenv("MASTER_AUDIT_SERVER_LOGS_ENABLED", "true").lower() == "true"
+            and self._site_host
             and self._path.is_file())
 
     def missing_rule_ids(self) -> list[int]:
@@ -119,6 +122,11 @@ class ServerLogDataProvider(DataProvider):
 
     def collect(self, site_ctx: SiteContext, page_contexts: list[PageContext],
                 shared_data: dict) -> bool:
+        audited_host = (urlsplit(site_ctx.base_url).hostname or "").lower().rstrip(".")
+        if not audited_host or audited_host != self._site_host:
+            shared_data["server_logs"] = {"errors": ["site_host:SiteMismatch"]}
+            self.runtime_available = False
+            return False
         status_counts: Counter[str] = Counter()
         bot_counts: Counter[str] = Counter()
         url_counts: Counter[str] = Counter()
