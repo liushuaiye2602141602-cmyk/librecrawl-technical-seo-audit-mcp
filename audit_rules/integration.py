@@ -68,6 +68,7 @@ def _get_runner() -> "RuleRunner":
     global _runner_cache
     if _runner_cache is None:
         from audit_rules.providers.gsc_provider import GSCDataProvider
+        from audit_rules.providers.ga4_provider import GA4DataProvider
         from audit_rules.providers.pagespeed_provider import PageSpeedDataProvider
         from audit_rules.providers.semrush_provider import SemrushDataProvider
         from audit_rules.registry import load_registry
@@ -77,10 +78,11 @@ def _get_runner() -> "RuleRunner":
         pagespeed = PageSpeedDataProvider()
         gsc = GSCDataProvider()
         semrush = SemrushDataProvider()
+        ga4 = GA4DataProvider()
         _runner_cache = RuleRunner(
             registry,
             providers={pagespeed.name: pagespeed, gsc.name: gsc,
-                       semrush.name: semrush},
+                       semrush.name: semrush, ga4.name: ga4},
         )
     return _runner_cache
 
