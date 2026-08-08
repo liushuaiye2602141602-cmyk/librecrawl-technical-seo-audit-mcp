@@ -1,12 +1,12 @@
 {
   "generated_at": "2026-08-09T05:12:54+08:00",
   "git_branch": "feat/master-audit-completion",
-  "git_head": "354728b48c482dabc54455f1fbd5b0d7a20ba420",
-  "git_commit_short": "354728b",
+  "git_head": "aba10ceed82aebb91b156c67135b8e5bd7e48434",
+  "git_commit_short": "aba10ce",
   "python": "3.14.5",
   "tests": {
-    "collected": 503,
-    "passed": 503,
+    "collected": 514,
+    "passed": 514,
     "failed": 0,
     "skipped": 0
   },
@@ -38,8 +38,8 @@
     },
     "pagespeed": {
       "status": "IMPLEMENTED",
-      "live_validated": false,
-      "note": "KEY_PRESENT_NOT_SMOKE_TESTED",
+      "live_validated": true,
+      "note": "CLIENT_PROVIDER_AND_V3_PIPELINE_VALIDATED_2026_08_09",
       "module": "audit_rules/providers/pagespeed_provider.py"
     },
     "gsc": {"status": "NOT_STARTED", "module": null},
@@ -92,5 +92,5 @@
     "SERVER_LOG_PATH": false,
     "WP_ADMIN_CREDENTIALS": false
   },
-  "live_validations_pending": ["PSI_SMOKE_NOT_RUN"]
+  "live_validations_pending": []
 }

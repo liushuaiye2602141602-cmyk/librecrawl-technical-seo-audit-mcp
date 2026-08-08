@@ -1,7 +1,7 @@
 # Remaining Implementation Roadmap — Codex Handoff
 
 **Date:** 2026-08-09
-**Current checkpoint:** 48 adapters, 503 tests passing after Phase 4B, commit `354728b`
+**Current checkpoint:** 48 adapters, 514 tests passing after PSI live validation, commit `aba10ce`
 **Goal:** 80/80 rules fully implemented, all providers live-validated, ≥1,200 tests
 **Related:** [CURRENT_RULE_MATRIX.csv](CURRENT_RULE_MATRIX.csv) | [BLOCKERS_AND_CREDENTIALS.md](BLOCKERS_AND_CREDENTIALS.md)
 
@@ -94,7 +94,10 @@ when a baseline is valid, `crawl-diff.csv`.
 
 ## Workstream 2: PSI Provider Live Validation
 
-**Priority:** P0 — validates existing Phase 3 investment
+**Status:** COMPLETE on 2026-08-09. Client, provider, and full V3 pipeline were
+validated live against `https://example.com/`; see
+`docs/audit/PHASE3_LIVE_VALIDATION_REPORT.md`.
+**Priority:** Completed
 **Depends on:** Credential present (PAGESPEED_API_KEY in .env)
 
 ### 2.1 Steps

@@ -222,10 +222,11 @@ audit_rules/
 - CSV ↔ registry ↔ adapter harness all agree
 - `test_phase3_classification_integrity.py` automates verification
 
-### Step 6: Live PSI smoke test ⚠️ SKIPPED
-- `PAGESPEED_API_KEY` not set in environment
-- Per user directive: "如果 PAGESPEED_API_KEY missing 不要伪造测试"
-- All PSI behavior verified via 11 mock fixtures covering good/poor/error/edge cases
+### Step 6: Live PSI smoke test ✅ COMPLETED 2026-08-09
+- Client, provider conversion, and full V3 pipeline validated against `https://example.com/`
+- Credential was process-scoped and was not printed, logged, stored, or committed
+- Four score categories, six lab metrics, URL-scope field data, and Lighthouse 13.4.1 parsed successfully
+- See `PHASE3_LIVE_VALIDATION_REPORT.md` for sanitized evidence and defects closed
 
 ### Step 7: PSI call dedup ✅
 - `test_psi_call_deduplication.py` confirms: N URLs = N fetches, not N×8

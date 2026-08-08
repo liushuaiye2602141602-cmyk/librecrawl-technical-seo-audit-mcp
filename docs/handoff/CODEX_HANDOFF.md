@@ -1,16 +1,16 @@
 # Codex Handoff — Master SEO Audit System
 
 **Handoff Date:** 2026-08-09
-**Git Commit:** `328760f` — `feat: checkpoint master audit phases 3 through 4a`
-**Branch:** `feat/master-audit-foundation`
-**Tests:** 457 passed, 0 failed
+**Git Commit:** `aba10ce` — `fix: connect pagespeed provider to v3 pipeline`
+**Branch:** `feat/master-audit-completion`
+**Tests:** 514 passed, 0 failed
 **Handoff Type:** COMPLETE PROJECT HANDOFF — build the ENTIRE remaining system
 
 ---
 
 ## 1. What This Project Is
 
-A **Master Technical SEO Audit System** that evaluates 80 SEO rules against crawled website data. It ingests LibreCrawl exports, runs 47 implemented check functions against page-level and site-level data, and produces structured findings (CSV reports, JSON artifacts).
+A **Master Technical SEO Audit System** that evaluates 80 SEO rules against crawled website data. It ingests LibreCrawl exports, runs 48 implemented check functions against page-level and site-level data, and produces structured findings (CSV reports, JSON artifacts).
 
 **Core architecture:** crawl once → normalize once → evaluate many rules (NOT N rules × N pages × HTTP refetch).
 
@@ -23,10 +23,10 @@ A **Master Technical SEO Audit System** that evaluates 80 SEO rules against craw
 | Metric | Value |
 |--------|-------|
 | Total rules | 80 (IDs 1..80) |
-| Rules with working adapters | 47 (18 FULL + 32 PARTIAL + 8 Phase 3 + 8 Phase 4A) |
-| Rules NOT implemented | 33 |
-| Tests | 457 passing |
-| Providers implemented | LibreCrawl (full), PageSpeed Insights (implemented, not smoke-tested) |
+| Rules with working adapters | 48 |
+| Rules without adapters | 32 |
+| Tests | 514 passing |
+| Providers implemented | LibreCrawl (full), PageSpeed Insights (live-validated 2026-08-09) |
 | Providers NOT started | GSC, Semrush, GA4, Server Logs, WordPress Privileged |
 
 ### Classification Breakdown
@@ -34,8 +34,8 @@ A **Master Technical SEO Audit System** that evaluates 80 SEO rules against craw
 | Classification | Count | Meaning |
 |----------------|-------|---------|
 | EXISTING_FULL | 18 | Fully implemented, production-ready |
-| EXISTING_PARTIAL | 32 | Partially implemented, has adapter, gaps remain |
-| NEW_AUTO | 1 | Rule 74 only — can be automated, deferred to Phase 4B |
+| EXISTING_PARTIAL | 33 | Partially implemented, has adapter, gaps remain |
+| NEW_AUTO | 0 | Rule 74 completed in Phase 4B |
 | NEW_EXTERNAL_DATA | 16 | Needs external API/data provider first |
 | NEW_MANUAL | 13 | Requires manual review workflow |
 | **TOTAL** | **80** | |
@@ -48,6 +48,7 @@ A **Master Technical SEO Audit System** that evaluates 80 SEO rules against craw
 | Phase 2 | 10,12,16,17,28,37,38,49,50,59,70,78,79 | 13 | EXISTING_PARTIAL — lazy-loaded checks |
 | Phase 3 | 19,20,21,22,24,61,62,63 | 8 | Performance/PSI checks |
 | Phase 4A | 18,32,39,43,47,51,60,67 | 8 | NEW_AUTO → EXISTING_PARTIAL stateless rules |
+| Phase 4B | 74 | 1 | Portable snapshot/diff regression rule |
 
 ---
 
@@ -121,10 +122,13 @@ Registered in `audit_rules/providers/`. LibreCrawl and PSI are implemented.
 | `audit_rules/integration.py` | Integration layer |
 | `audit_rules/checks/__init__.py` | Lazy imports, `get_check()` accessor |
 | `audit_rules/checks/phase4a_rules.py` | Phase 4A check functions (~700 lines) |
+| `audit_rules/snapshot.py` | Portable versioned crawl snapshot schema and gzip I/O |
+| `audit_rules/snapshot_diff.py` | O(n) crawl diff engine and CSV serialization |
+| `audit_rules/checks/snapshot_diff.py` | Rule 74 findings adapter |
 | `audit_rules/checks/performance.py` | Phase 3 performance checks |
 | `audit_rules/checks/performance_csv.py` | Phase 3 CSV export checks |
 | `audit_rules/providers/librecrawl_provider.py` | LibreCrawl data provider |
-| `audit_rules/providers/pagespeed_provider.py` | PSI provider (implemented, not smoke-tested) |
+| `audit_rules/providers/pagespeed_provider.py` | PSI provider (production-wired and live-validated) |
 | `audit_rules/providers/psi_client.py` | Low-level PSI API client |
 | `audit_rules/providers/performance_snapshot.py` | Performance snapshot provider |
 | `audit_specs/master_audit_mapping.csv` | **SOURCE OF TRUTH** — 80-row CSV with impl_status |

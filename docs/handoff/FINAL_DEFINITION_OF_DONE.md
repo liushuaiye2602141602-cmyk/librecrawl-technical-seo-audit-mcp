@@ -76,14 +76,14 @@ Every condition below must be **demonstrably true** before the project is declar
 ### B.2 — All Providers Have Tests
 **Condition:** Each provider has `tests/providers/test_<provider>_provider.py` with mocked API responses.
 **Verification:** File existence check + `pytest tests/providers/ -q` passes.
-**Current state:** PSI provider tests may not exist; others not started.
+**Current state:** PSI provider/client mocked tests exist and pass; other providers remain outstanding.
 **Status:** ❌ NOT MET
 
 ### B.3 — PSI Provider Live-Validated
 **Condition:** PSI provider has been run against at least one real domain with valid API key; produces correct CrUX/Lighthouse data.
 **Verification:** Manual smoke test log or automated integration test with real key.
-**Current state:** Key exists but not smoke-tested.
-**Status:** ❌ NOT MET
+**Current state:** Live client, provider conversion, and V3 pipeline validated against `https://example.com/` on 2026-08-09.
+**Status:** ✅ MET
 
 ### B.4 — GSC Provider Live-Validated
 **Condition:** GSC provider authenticated and returned data for at least one verified property.

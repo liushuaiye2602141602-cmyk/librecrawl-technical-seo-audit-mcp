@@ -176,7 +176,7 @@ class SomeProvider(BaseProvider):
 
 ## CREDENTIAL STATUS
 
-- PAGESPEED_API_KEY: PRESENT in .env (not smoke-tested)
+- PAGESPEED_API_KEY: PRESENT; live client/provider/V3 validation completed 2026-08-09
 - GSC: NOT AVAILABLE (needs Google Cloud OAuth setup)
 - Semrush: NOT AVAILABLE (needs paid subscription API key)
 - GA4: NOT AVAILABLE (needs property + service account)
