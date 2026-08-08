@@ -1,13 +1,22 @@
-"""Phase 1+2 Compatibility Adapters — bind existing + new check logic to registry rules.
+"""Phase 1+2+3 Compatibility Adapters — bind check logic to registry rules.
 
 Phase 1 (18 EXISTING_FULL):
   - Adapters bound to existing check implementations via adapter/binding.
   - Do NOT modify existing check implementations.
 
-Phase 2 (14 EXISTING_PARTIAL → enhanced):
+Phase 2 (13 EXISTING_PARTIAL → enhanced):
   - New local checks in audit_rules.checks/ using only existing LibreCrawl data.
   - Registered alongside Phase 1 adapters in the same harness.
-  - Rules without check implementations remain NOT_CHECKED via CoverageManager.
+
+Phase 3 (8 performance rules):
+  - PSI-backed checks in audit_rules.checks.performance (Rules 19-63).
+  - PageSpeedDataProvider injects PerformanceSnapshot cache into data dict.
+  - Provider availability determines execution — NO direct API calls.
+
+Phase 4A (8 NEW_AUTO stateless rules):
+  - Local checks in audit_rules.checks.phase4a_rules (Rules 18,32,39,43,47,51,60,67).
+  - No external HTTP requests — using existing LibreCrawl data only.
+  - Rule 39 safe WordPress probes gated by WP_SECURITY_PROBES_ENABLED.
 
 Each adapter:
   1. Takes (rule, site_ctx, page_contexts, data)
@@ -33,6 +42,14 @@ AdapterFunc = Callable[..., list[Finding]]
 # Lazy import for Phase 2 checks (avoids import errors when checks/ is being built)
 _PHASE2_CHECKS_LOADED = False
 _PHASE2_CHECKS: dict[str, Callable] = {}
+
+# Lazy import for Phase 3 performance checks
+_PHASE3_CHECKS_LOADED = False
+_PHASE3_CHECKS: dict[str, Callable] = {}
+
+# Lazy import for Phase 4A NEW_AUTO stateless rules
+_PHASE4A_CHECKS_LOADED = False
+_PHASE4A_CHECKS: dict[str, Callable] = {}
 
 
 def _load_phase2_checks() -> dict[str, Callable]:
@@ -72,20 +89,75 @@ def _load_phase2_checks() -> dict[str, Callable]:
     return _PHASE2_CHECKS
 
 
+def _load_phase3_checks() -> dict[str, Callable]:
+    """Import Phase 3 performance check functions lazily."""
+    global _PHASE3_CHECKS_LOADED, _PHASE3_CHECKS
+    if _PHASE3_CHECKS_LOADED:
+        return _PHASE3_CHECKS
+    try:
+        from audit_rules.checks import get_check
+        checks_to_load = {
+            "core_web_vitals": "check_core_web_vitals",
+            "server_response_ttfb": "check_ttfb",
+            "render_blocking_css_js": "check_render_blocking",
+            "image_optimization": "check_image_performance",
+            "mobile_usability": "check_mobile_experience",
+            "field_vs_lab_data": "check_field_vs_lab",
+            "third_party_script_impact": "check_third_party_scripts",
+            "font_loading_cls": "check_font_cls",
+        }
+        for rule_id, check_name in checks_to_load.items():
+            fn = get_check(check_name)
+            if fn is not None:
+                _PHASE3_CHECKS[rule_id] = fn
+        _PHASE3_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE3_CHECKS
+
+
+def _load_phase4a_checks() -> dict[str, Callable]:
+    """Import Phase 4A NEW_AUTO stateless check functions lazily."""
+    global _PHASE4A_CHECKS_LOADED, _PHASE4A_CHECKS
+    if _PHASE4A_CHECKS_LOADED:
+        return _PHASE4A_CHECKS
+    try:
+        from audit_rules.checks import get_check
+        checks_to_load = {
+            "tag_archive_search_indexability": "check_archive_search_indexability",
+            "media_sitemap": "check_media_sitemap",
+            "xmlrpc_rest_api_exposure": "check_wordpress_api_exposure",
+            "sitemap_lastmod_accuracy": "check_sitemap_lastmod",
+            "crawlable_a_href_links": "check_crawlable_links",
+            "internal_links_to_redirects": "check_internal_redirect_links",
+            "multilingual_canonical": "check_multilang_canonical",
+            "staging_site_indexed": "check_staging_indexability",
+        }
+        for rule_id, check_name in checks_to_load.items():
+            fn = get_check(check_name)
+            if fn is not None:
+                _PHASE4A_CHECKS[rule_id] = fn
+        _PHASE4A_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE4A_CHECKS
+
+
 @dataclass
 class CompatibilityHarness:
-    """Binds 18 EXISTING_FULL rules to their existing check implementations.
+    """Binds EXISTING_FULL (18), EXISTING_PARTIAL (13), and performance (8)
+    rules to their check implementations.
 
     Each adapter extracts findings from existing LibreCrawl output data
-    and returns list[Finding] in the unified format. No existing code
-    is modified — adapters read from existing output structures.
+    or injected PerformanceSnapshot cache and returns list[Finding] in
+    the unified format. No existing code is modified.
     """
 
     registry: list[RuleDefinition]
     _adapters: dict[str, AdapterFunc] = field(default_factory=dict)
 
     def __post_init__(self):
-        """Register Phase 1 (18 EXISTING_FULL) + Phase 2 (14 EXISTING_PARTIAL) adapters."""
+        """Register Phase 1 (18) + Phase 2 (13) + Phase 3 (8) adapters."""
         # ── Phase 1: EXISTING_FULL adapters ──────────────────────────────
         self._adapters = {
             # 1: robots.txt existence + rules
@@ -128,6 +200,12 @@ class CompatibilityHarness:
         # ── Phase 2: EXISTING_PARTIAL local checks ───────────────────────
         phase2 = _load_phase2_checks()
         self._adapters.update(phase2)
+        # ── Phase 3: Performance/PSI checks ──────────────────────────────
+        phase3 = _load_phase3_checks()
+        self._adapters.update(phase3)
+        # ── Phase 4A: NEW_AUTO stateless rules ────────────────────────────
+        phase4a = _load_phase4a_checks()
+        self._adapters.update(phase4a)
 
     def run(
         self,

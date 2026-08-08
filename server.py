@@ -2285,64 +2285,30 @@ def librecrawl_internal_links_analysis(crawl_id: int = None) -> dict:
 # ── PageSpeed Insights ────────────────────────────────────────────────────────
 
 def _fetch_psi(url: str, strategy: str = "mobile") -> dict:
-    """Fetch Core Web Vitals + performance score from Google PSI API."""
-    if not PSI_API_KEY:
-        return {"error": "PAGESPEED_API_KEY not set."}
-    params = {"url": url, "key": PSI_API_KEY, "strategy": strategy,
-              "category": ["performance", "seo", "accessibility", "best-practices"]}
-    try:
-        r = httpx.get(PSI_API_BASE, params=params, timeout=30)
-        r.raise_for_status()
-        data = r.json()
-    except Exception as e:
-        return {"error": str(e)}
+    """Fetch Core Web Vitals + performance score from Google PSI API.
 
-    lhr    = data.get("lighthouseResult", {})
-    cats   = lhr.get("categories", {})
-    audits = lhr.get("audits", {})
-    field_metrics = data.get("loadingExperience", {}).get("metrics", {})
+    Delegates to the shared audit_rules.providers.psi_client module —
+    the single canonical PSI implementation used by both MCP tools
+    and the V3 audit pipeline.
+    """
+    from audit_rules.providers.psi_client import fetch_pagespeed
 
-    def score(cat): return round((cats.get(cat, {}).get("score") or 0) * 100)
-    def ms(audit_id):
-        v = audits.get(audit_id, {}).get("numericValue")
-        return round(v) if v else None
+    raw = fetch_pagespeed(url, strategy=strategy, api_key=PSI_API_KEY)
 
-    field = {}
-    for metric, key in [("LCP","LARGEST_CONTENTFUL_PAINT_MS"), ("FID","FIRST_INPUT_DELAY_MS"),
-                         ("CLS","CUMULATIVE_LAYOUT_SHIFT_SCORE"), ("INP","INTERACTION_TO_NEXT_PAINT"),
-                         ("FCP","FIRST_CONTENTFUL_PAINT_MS"), ("TTFB","EXPERIMENTAL_TIME_TO_FIRST_BYTE")]:
-        m = field_metrics.get(key, {})
-        if m:
-            field[metric] = {"value": m.get("percentile"), "category": m.get("category")}
-
-    lab = {k: v for k, v in {
-        "FCP_ms":  ms("first-contentful-paint"),
-        "LCP_ms":  ms("largest-contentful-paint"),
-        "TBT_ms":  ms("total-blocking-time"),
-        "CLS":     audits.get("cumulative-layout-shift", {}).get("numericValue"),
-        "Speed_Index_ms": ms("speed-index"),
-        "TTI_ms":  ms("interactive"),
-    }.items() if v is not None}
-
-    opps = []
-    for audit_id, audit in audits.items():
-        if audit.get("details", {}).get("type") == "opportunity":
-            savings = audit.get("details", {}).get("overallSavingsMs", 0) or 0
-            if savings > 200:
-                opps.append({"title": audit.get("title"), "savings_ms": round(savings)})
-    opps.sort(key=lambda x: -x["savings_ms"])
+    # Map to backward-compatible MCP tool output format
+    if "error" in raw:
+        return {"error": raw["error"]}
 
     return {
-        "url": url, "strategy": strategy,
-        "scores": {
-            "performance":    score("performance"),
-            "seo":            score("seo"),
-            "accessibility":  score("accessibility"),
-            "best_practices": score("best-practices"),
-        },
-        "field_data_cwv": field,
-        "lab_data": lab,
-        "top_opportunities": opps[:5],
+        "url": raw["url"],
+        "strategy": raw["strategy"],
+        "scores": raw["scores"],
+        "field_data_cwv": raw["field_data_cwv"],
+        "lab_data": raw["lab_data"],
+        "top_opportunities": [
+            {"title": o["title"], "savings_ms": o["savings_ms"]}
+            for o in raw.get("top_opportunities", [])
+        ],
     }
 
 

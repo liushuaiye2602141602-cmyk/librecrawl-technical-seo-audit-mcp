@@ -151,7 +151,7 @@ def sample_pages():
 # ============================================================
 
 class TestAdapterRegistration:
-    """Verify all Phase 1 (18) + Phase 2 (13) rules have registered adapters.
+    """Verify all Phase 1 (18) + Phase 2 (13) + Phase 3 (8) rules have registered adapters.
 
     Rule 40 (audit_deliverables) is handled at the integration level,
     not as a per-rule adapter — generate_task_csv() has a different signature.
@@ -161,7 +161,9 @@ class TestAdapterRegistration:
     # Rule 40 (audit_deliverables) is NOT an adapter — generate_task_csv()
     # is called from integration.py with a different signature
     PHASE2_IDS = {10, 12, 16, 17, 28, 37, 38, 49, 50, 59, 70, 78, 79}
-    ALL_ADAPTER_IDS = PHASE1_IDS | PHASE2_IDS  # 31 rules with adapters
+    PHASE3_IDS = {19, 20, 21, 22, 24, 61, 62, 63}
+    PHASE4A_IDS = {18, 32, 39, 43, 47, 51, 60, 67}
+    ALL_ADAPTER_IDS = PHASE1_IDS | PHASE2_IDS | PHASE3_IDS | PHASE4A_IDS  # 47 rules with adapters
 
     def test_all_adapters_registered(self, harness):
         """Each rule with an adapter must have it registered (32 total)."""
@@ -197,9 +199,9 @@ class TestAdapterRegistration:
         )
 
     def test_total_adapter_count(self, harness):
-        """Exactly 31 adapters total (18 Phase 1 + 13 Phase 2)."""
-        assert len(harness._adapters) == 31, (
-            f"Expected 31 total adapters, got {len(harness._adapters)}"
+        """Exactly 47 adapters total (18 P1 + 13 P2 + 8 P3 + 8 P4A)."""
+        assert len(harness._adapters) == 47, (
+            f"Expected 47 total adapters, got {len(harness._adapters)}"
         )
 
 

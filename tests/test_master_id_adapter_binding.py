@@ -1,12 +1,14 @@
-"""Phase 1+2 — Master Audit ID → Adapter Binding Verification.
+"""Phase 1+2+3 — Master Audit ID → Adapter Binding Verification.
 
-Verifies that the 31 adapter rule_ids (18 Phase 1 EXISTING_FULL + 13 Phase 2
-local checks) in compatibility harness exactly correspond to the approved
-Master Audit IDs, and that the mapping is consistent across CSV source of
-truth, registry RULE_ID_MAP, and adapters.
+Verifies that the 47 adapter rule_ids (18 P1 EXISTING_FULL + 13 P2 local
+checks + 8 P3 performance + 8 P4A NEW_AUTO) in compatibility harness exactly
+correspond to the approved Master Audit IDs, and that the mapping is consistent
+across CSV source of truth, registry RULE_ID_MAP, and adapters.
 
-Phase 1 (18): {1,3,4,6,7,8,9,11,14,15,26,27,29,30,41,42,45,58}
-Phase 2 (13): {10,12,16,17,28,37,38,49,50,59,70,78,79}
+Phase 1 (18):  {1,3,4,6,7,8,9,11,14,15,26,27,29,30,41,42,45,58}
+Phase 2 (13):  {10,12,16,17,28,37,38,49,50,59,70,78,79}
+Phase 3 (8):   {19,20,21,22,24,61,62,63}
+Phase 4A (8):  {18,32,39,43,47,51,60,67}
 """
 
 import sys
@@ -82,6 +84,24 @@ MASTER_ID_ADAPTER_MAP = {
     70: "check_form_accessibility",
     78: "check_schema_vs_visible",
     79: "check_image_alt_quality",
+    # Phase 3 (8 performance checks — audit_rules.checks.performance)
+    19: "check_core_web_vitals",
+    20: "check_ttfb",
+    21: "check_render_blocking",
+    22: "check_image_performance",
+    24: "check_mobile_experience",
+    61: "check_field_vs_lab",
+    62: "check_third_party_scripts",
+    63: "check_font_cls",
+    # Phase 4A (8 NEW_AUTO stateless checks — audit_rules.checks.phase4a_rules)
+    18: "check_archive_search_indexability",
+    32: "check_media_sitemap",
+    39: "check_wordpress_api_exposure",
+    43: "check_sitemap_lastmod",
+    47: "check_crawlable_links",
+    51: "check_internal_redirect_links",
+    60: "check_multilang_canonical",
+    67: "check_staging_indexability",
 }
 
 
@@ -223,15 +243,19 @@ class TestAdapterRegistration:
         registry = load_registry()
         harness = CompatibilityHarness(registry)
 
-        # Expected set: 18 Phase 1 + 13 Phase 2 = 31
+        # Expected set: 18 Phase 1 + 13 Phase 2 + 8 Phase 3 + 8 Phase 4A = 47
         ALL_ADAPTER_MASTER_IDS = EXISTING_FULL_MASTER_IDS | {
             10, 12, 16, 17, 28, 37, 38, 49, 50, 59, 70, 78, 79,
+        } | {
+            19, 20, 21, 22, 24, 61, 62, 63,
+        } | {
+            18, 32, 39, 43, 47, 51, 60, 67,
         }
 
         # Get all registered adapter rule_ids
         adapter_rule_ids = set(harness._adapters.keys())
-        assert len(adapter_rule_ids) == 31, (
-            f"Expected 31 adapters (18 P1 + 13 P2), "
+        assert len(adapter_rule_ids) == 47, (
+            f"Expected 47 adapters (18 P1 + 13 P2 + 8 P3 + 8 P4A), "
             f"got {len(adapter_rule_ids)}: {adapter_rule_ids}"
         )
 
@@ -293,8 +317,8 @@ class TestAdapterRegistration:
         harness = CompatibilityHarness(registry)
 
         func_ids = {id(f) for f in harness._adapters.values()}
-        assert len(func_ids) == 31, (
-            f"Expected 31 unique adapter functions (18 P1 + 13 P2), "
+        assert len(func_ids) == 47, (
+            f"Expected 47 unique adapter functions (18 P1 + 13 P2 + 8 P3 + 8 P4A), "
             f"got {len(func_ids)}"
         )
 
@@ -377,7 +401,7 @@ class TestClassificationCrossCheck:
         counts = Counter(r.impl_status.value for r in registry)
 
         assert counts.get("EXISTING_FULL", 0) == 18
-        assert counts.get("EXISTING_PARTIAL", 0) == 24
-        assert counts.get("NEW_AUTO", 0) == 9
+        assert counts.get("EXISTING_PARTIAL", 0) == 32
+        assert counts.get("NEW_AUTO", 0) == 1  # Rule 74 only (Phase 4B deferred)
         assert counts.get("NEW_EXTERNAL_DATA", 0) == 16
         assert counts.get("NEW_MANUAL", 0) == 13

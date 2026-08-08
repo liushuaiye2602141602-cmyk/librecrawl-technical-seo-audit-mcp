@@ -1,8 +1,12 @@
 """RuleRunner — orchestrates rule evaluation across site + pages.
 
-Phase 1+2: Uses LibreCrawlDataProvider (existing export data only, no HTTP
-re-fetch) + CompatibilityHarness (18 Phase 1 EXISTING_FULL + 14 Phase 2
-local adapters) + CoverageManager (80-row coverage matrix).
+Phase 1+2+3: Uses LibreCrawlDataProvider (existing export data) +
+CompatibilityHarness (18 P1 + 13 P2 + 8 P3 adapters) +
+CoverageManager (80-row coverage matrix).
+
+Phase 3 PageSpeed: PageSpeedDataProvider injected via self.providers;
+samples pages, fetches PerformanceSnapshots, and injects cache into
+the data dict for all 8 performance checks to share.
 
 Usage:
     runner = RuleRunner(registry, providers, harness)
@@ -18,6 +22,9 @@ from audit_rules.providers.base import DataProvider
 from audit_rules.providers.librecrawl_provider import LibreCrawlDataProvider
 from audit_rules.adapters import CompatibilityHarness
 from audit_rules.coverage import CoverageManager
+from audit_rules.providers.pagespeed_provider import (
+    PageSpeedDataProvider, select_performance_sample,
+)
 
 
 @dataclass
@@ -70,7 +77,7 @@ class RuleRunner:
         librecrawl = LibreCrawlDataProvider(pages, site_data, links)
         site_ctx, page_contexts = librecrawl.create_contexts(base_url, completeness)
 
-        # Step 2: Enrich with other providers (Phase 3+ — no-op in Phase 1)
+        # Step 2: Enrich with registered providers (Phase 3+ — no-op in Phase 1)
         available_providers = {"LibreCrawl"}
         for name, provider in self.providers.items():
             if provider.is_available():
@@ -83,16 +90,42 @@ class RuleRunner:
                     # Provider failed → mark unavailable, rules will get NOT_CHECKED
                     available_providers.discard(name)
 
-        # Step 3: Run adapters to get findings (Phase 1 + Phase 2)
+        # Step 3: Populate PSI cache if PageSpeedDataProvider is available
+        psi_provider = self.providers.get("PageSpeedInsights")
+        if psi_provider is not None and psi_provider.is_available():
+            strategies = psi_provider._strategies
+            sampled = select_performance_sample(
+                page_contexts, limit=psi_provider._sample_limit,
+            )
+            # Primary strategy (mobile) for all rule checks
+            primary_strategy = strategies[0]
+            sampled_urls = [ctx.url for ctx, reason in sampled]
+            for url in sampled_urls:
+                snap = psi_provider.get_snapshot(url, primary_strategy)
+                if snap is None:
+                    # Provider became unavailable mid-run
+                    available_providers.discard("PageSpeedInsights")
+                    break
+            # Inject cache + strategy into data dict for all checks
+            cache = psi_provider._cache.copy() if psi_provider._cache else {}
+            existing_data["_psi_cache"] = cache
+            existing_data["_psi_provider"] = psi_provider
+            existing_data["psi_strategy"] = primary_strategy
+            existing_data["psi_sampled"] = sampled
+        else:
+            existing_data["_psi_cache"] = {}
+            existing_data["psi_strategy"] = "mobile"
+
+        # Step 4: Run adapters to get findings (Phase 1 + Phase 2 + Phase 3)
         findings = self.harness.run(
             site_ctx, page_contexts, existing_data,
         )
 
-        # Step 4: Release heavy fields from all pages
+        # Step 5: Release heavy fields from all pages
         for pctx in page_contexts:
             pctx.release_heavy()
 
-        # Step 5: Compute coverage matrix
+        # Step 6: Compute coverage matrix
         mgr = CoverageManager(self.registry)
         coverage_rows = mgr.compute(
             site_ctx, page_contexts, findings,

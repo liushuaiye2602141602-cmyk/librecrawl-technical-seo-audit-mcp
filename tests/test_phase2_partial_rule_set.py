@@ -1,11 +1,11 @@
 """Phase 2 — EXISTING_PARTIAL Rule Set Verification.
 
 Verifies that the CSV source of truth contains exactly the expected
-24 EXISTING_PARTIAL Master Audit IDs, and that none of them are
-misclassified as EXISTING_FULL or other statuses.
+32 EXISTING_PARTIAL Master Audit IDs (including 8 Phase 4A migrated from NEW_AUTO),
+and that none of them are misclassified as EXISTING_FULL or other statuses.
 
 EXPECTED:
-  PARTIAL_RULE_IDS == {2,5,10,12,13,16,17,19,20,22,23,25,28,37,38,40,49,50,59,61,66,70,78,79}
+  PARTIAL_RULE_IDS == {2,5,10,12,13,16,17,18,19,20,22,23,25,28,32,37,38,39,40,43,47,49,50,51,59,60,61,66,67,70,78,79}
 """
 
 import csv
@@ -18,11 +18,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 # ============================================================
-# Expected 24 EXISTING_PARTIAL Master Audit IDs
+# Expected 32 EXISTING_PARTIAL Master Audit IDs (24 original + 8 Phase 4A)
 # ============================================================
 PARTIAL_RULE_IDS = {
-    2, 5, 10, 12, 13, 16, 17, 19, 20, 22, 23, 25,
-    28, 37, 38, 40, 49, 50, 59, 61, 66, 70, 78, 79,
+    2, 5, 10, 12, 13, 16, 17, 18, 19, 20, 22, 23, 25,
+    28, 32, 37, 38, 39, 40, 43, 47, 49, 50, 51, 59, 60, 61, 66, 67, 70, 78, 79,
 }
 
 
@@ -44,7 +44,7 @@ class TestPartialRuleSet:
                 if row.get("impl_status", "").strip() == "EXISTING_PARTIAL":
                     partial_ids.append(int(raw_id))
 
-        assert len(partial_ids) == 24, (
+        assert len(partial_ids) == 32, (
             f"Expected 24 EXISTING_PARTIAL, got {len(partial_ids)}: {partial_ids}"
         )
         assert set(partial_ids) == PARTIAL_RULE_IDS, (
@@ -55,7 +55,7 @@ class TestPartialRuleSet:
 
     def test_partial_rule_ids_fixed_cardinality(self):
         """The expected set must have exactly 24 unique IDs."""
-        assert len(PARTIAL_RULE_IDS) == 24
+        assert len(PARTIAL_RULE_IDS) == 32
 
     def test_no_partial_is_also_existing_full(self):
         """No rule can be both EXISTING_PARTIAL and EXISTING_FULL."""
@@ -159,8 +159,8 @@ class TestPartialRuleSet:
         # Verify expected counts
         counts = Counter(seen.values())
         assert counts.get("EXISTING_FULL", 0) == 18
-        assert counts.get("EXISTING_PARTIAL", 0) == 24
-        assert counts.get("NEW_AUTO", 0) == 9
+        assert counts.get("EXISTING_PARTIAL", 0) == 32
+        assert counts.get("NEW_AUTO", 0) == 1  # Rule 74 only (Phase 4B deferred)
         assert counts.get("NEW_EXTERNAL_DATA", 0) == 16
         assert counts.get("NEW_MANUAL", 0) == 13
         assert sum(counts.values()) == 80
