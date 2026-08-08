@@ -73,6 +73,8 @@ def _get_runner() -> "RuleRunner":
         from audit_rules.providers.semrush_provider import SemrushDataProvider
         from audit_rules.providers.server_log_provider import ServerLogDataProvider
         from audit_rules.providers.wordpress_privileged_provider import WordPressPrivilegedProvider
+        from audit_rules.providers.render_snapshot_provider import RenderSnapshotProvider
+        from audit_rules.providers.availability_snapshot_provider import AvailabilitySnapshotProvider
         from audit_rules.registry import load_registry
         from audit_rules.runner import RuleRunner
 
@@ -83,12 +85,16 @@ def _get_runner() -> "RuleRunner":
         ga4 = GA4DataProvider()
         server_logs = ServerLogDataProvider()
         wordpress = WordPressPrivilegedProvider()
+        rendered = RenderSnapshotProvider()
+        availability = AvailabilitySnapshotProvider()
         _runner_cache = RuleRunner(
             registry,
             providers={pagespeed.name: pagespeed, gsc.name: gsc,
                        semrush.name: semrush, ga4.name: ga4,
                        server_logs.name: server_logs,
-                       wordpress.name: wordpress},
+                       wordpress.name: wordpress,
+                       rendered.name: rendered,
+                       availability.name: availability},
         )
     return _runner_cache
 
