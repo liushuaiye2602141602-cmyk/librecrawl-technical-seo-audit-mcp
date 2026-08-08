@@ -164,10 +164,9 @@ def test_rule74_registered_and_zero_new_auto() -> None:
     counts = Counter(rule.impl_status.value for rule in registry)
 
     assert harness._adapters["regression_test"].__name__ == "check_regression_test"
-    assert len(harness._adapters) == 69
+    assert len(harness._adapters) == 72
     assert counts == {
         "EXISTING_FULL": 18,
-            "EXISTING_PARTIAL": 51,
-            "NEW_EXTERNAL_DATA": 3,
+            "EXISTING_PARTIAL": 54,
             "NEW_MANUAL": 8,
     }

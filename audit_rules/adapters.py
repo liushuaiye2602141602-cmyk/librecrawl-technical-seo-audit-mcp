@@ -91,6 +91,10 @@ _PHASE8_CHECKS: dict[str, Callable] = {}
 _PHASE9_CHECKS_LOADED = False
 _PHASE9_CHECKS: dict[str, Callable] = {}
 
+# Phase 11: portable rendered DOM and availability snapshot checks
+_PHASE11_CHECKS_LOADED = False
+_PHASE11_CHECKS: dict[str, Callable] = {}
+
 
 def _load_phase2_checks() -> dict[str, Callable]:
     """Import Phase 2 check functions lazily."""
@@ -325,6 +329,26 @@ def _load_phase9_checks() -> dict[str, Callable]:
     return _PHASE9_CHECKS
 
 
+def _load_phase11_checks() -> dict[str, Callable]:
+    global _PHASE11_CHECKS_LOADED, _PHASE11_CHECKS
+    if _PHASE11_CHECKS_LOADED:
+        return _PHASE11_CHECKS
+    try:
+        from audit_rules.checks import get_check
+        for rule_id, check_name in {
+            "js_rendered_content": "check_js_rendered_content",
+            "lazy_load_indexability": "check_lazy_load_indexability",
+            "availability_5xx_monitoring": "check_availability_5xx_monitoring",
+        }.items():
+            check = get_check(check_name)
+            if check is not None:
+                _PHASE11_CHECKS[rule_id] = check
+        _PHASE11_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE11_CHECKS
+
+
 @dataclass
 class CompatibilityHarness:
     """Binds EXISTING_FULL (18), EXISTING_PARTIAL (13), and performance (8)
@@ -407,6 +431,8 @@ class CompatibilityHarness:
         self._adapters.update(phase8)
         phase9 = _load_phase9_checks()
         self._adapters.update(phase9)
+        phase11 = _load_phase11_checks()
+        self._adapters.update(phase11)
 
     def run(
         self,

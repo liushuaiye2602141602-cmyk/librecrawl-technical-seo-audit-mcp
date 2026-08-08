@@ -606,8 +606,8 @@ class TestPhase3AdapterRegistration:
         from audit_rules.registry import load_registry
         registry = load_registry()
         harness = CompatibilityHarness(registry)
-        assert len(harness._adapters) == 69, (
-            f"Expected 69 adapters through Phase 9, got {len(harness._adapters)}"
+        assert len(harness._adapters) == 72, (
+            f"Expected 72 adapters through Phase 11, got {len(harness._adapters)}"
         )
 
     def test_psi_backed_rules_are_classified_partial_not_unimplemented_external(self):

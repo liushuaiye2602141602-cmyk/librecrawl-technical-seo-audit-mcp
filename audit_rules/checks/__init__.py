@@ -122,6 +122,11 @@ def _import_all():
             "check_database_autoload_bloat", "check_admin_2fa",
             "check_abandoned_plugins_themes",
         ],
+        # Phase 11: portable rendered-DOM and availability evidence
+        "external_snapshots": [
+            "check_js_rendered_content", "check_lazy_load_indexability",
+            "check_availability_5xx_monitoring",
+        ],
     }
     for mod, names in modules.items():
         _IMPORTS.update(_lazy_import(mod, names))
@@ -175,5 +180,8 @@ __all__ = [
     "check_wp_updates_security", "check_wp_cron_tasks",
     "check_database_autoload_bloat", "check_admin_2fa",
     "check_abandoned_plugins_themes",
+    # Phase 11
+    "check_js_rendered_content", "check_lazy_load_indexability",
+    "check_availability_5xx_monitoring",
     "get_check",
 ]

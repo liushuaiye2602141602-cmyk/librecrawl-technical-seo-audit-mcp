@@ -272,7 +272,7 @@ def test_all_seven_previously_unbound_rules_are_registered():
     }
 
     assert rule_ids <= set(harness._adapters)
-    assert len(harness._adapters) == 69
+    assert len(harness._adapters) == 72
 
 
 def test_missing_header_and_tls_sources_are_unknown_not_pass():
