@@ -196,3 +196,29 @@ class TestEndToEndIntegration:
         )
         assert len(coverage) == 80
         assert "audit_id" in csv_str
+
+    def test_export_path_forwards_existing_data_to_rule_runner(
+        self, sample_export, monkeypatch
+    ):
+        """Snapshot baselines must reach Rule 74 on the export shortcut."""
+        from audit_rules import integration
+
+        class CapturingRunner:
+            def __init__(self):
+                self.existing_data = None
+
+            def run_from_export(self, export_data, base_url, existing_data=None):
+                self.existing_data = existing_data
+                return [], []
+
+        fake_runner = CapturingRunner()
+        monkeypatch.setattr(integration, "_runner_cache", fake_runner)
+        integration.enable_v3()
+
+        integration.run_v3_pipeline(
+            export_data=sample_export,
+            base_url="https://x.com",
+            existing_data={"snapshot_baseline_available": True},
+        )
+
+        assert fake_runner.existing_data == {"snapshot_baseline_available": True}

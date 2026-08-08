@@ -148,10 +148,9 @@ def validate_snapshot(snapshot: dict[str, Any]) -> None:
 
 def write_snapshot(snapshot: dict[str, Any], path: str | Path) -> Path:
     """Validate and write a deterministic gzip-compressed JSON snapshot."""
-    validate_snapshot(snapshot)
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(_encode_snapshot(snapshot))
+    target.write_bytes(snapshot_to_gzip_bytes(snapshot))
     return target
 
 
@@ -167,6 +166,26 @@ def load_snapshot(path: str | Path) -> dict[str, Any]:
     except (OSError, UnicodeError, json.JSONDecodeError, TypeError) as exc:
         raise SnapshotValidationError(
             f"Unable to load snapshot {source}: {exc}"
+        ) from exc
+
+
+def snapshot_to_gzip_bytes(snapshot: dict[str, Any]) -> bytes:
+    """Validate and encode a snapshot as deterministic gzip-compressed JSON."""
+    validate_snapshot(snapshot)
+    return _encode_snapshot(snapshot)
+
+
+def snapshot_from_gzip_bytes(payload: bytes) -> dict[str, Any]:
+    """Decode and validate an in-memory gzip snapshot payload."""
+    try:
+        snapshot = _decode_snapshot(payload)
+        validate_snapshot(snapshot)
+        return snapshot
+    except SnapshotValidationError:
+        raise
+    except (OSError, EOFError, UnicodeError, json.JSONDecodeError, TypeError) as exc:
+        raise SnapshotValidationError(
+            f"Unable to decode snapshot bytes: {exc}"
         ) from exc
 
 

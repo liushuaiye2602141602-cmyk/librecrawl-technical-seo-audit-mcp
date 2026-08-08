@@ -22,6 +22,7 @@ pick polling back up; otherwise we issue resume_from_crawl_id and continue.
 
 import threading
 import time
+import os
 from pathlib import Path
 from datetime import datetime
 
@@ -47,6 +48,70 @@ HARD_DEADLINE_SECONDS    = 43200      # 12 hr ceiling — full polite crawls of
 _runner_thread: threading.Thread | None = None
 _wake = threading.Event()
 _shutdown = threading.Event()
+
+
+def _prepare_snapshot_artifacts(
+    sid: str,
+    export_data: dict,
+    base_url: str,
+    domain: str,
+    timestamp: str,
+    reports_dir: Path,
+) -> dict:
+    """Persist additive snapshot artifacts and return Rule 74 input data."""
+    from audit_rules.integration import build_snapshot_artifacts
+
+    baseline_value = os.environ.get("AUDIT_SNAPSHOT_BASELINE_PATH", "").strip()
+    baseline_path = Path(baseline_value) if baseline_value else None
+    output_value = os.environ.get("AUDIT_SNAPSHOT_OUTPUT_DIR", "").strip()
+    output_dir = Path(output_value) if output_value else Path(reports_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    baseline_available = False
+    changes = []
+    diff_csv = ""
+    try:
+        snapshot_bytes, changes, diff_csv = build_snapshot_artifacts(
+            export_data,
+            base_url,
+            baseline_path=baseline_path,
+        )
+        baseline_available = baseline_path is not None
+    except Exception as exc:
+        if baseline_path is None:
+            state.log_event(sid, "snapshot_artifact_failed", str(exc))
+            return {
+                "snapshot_changes": [],
+                "snapshot_baseline_available": False,
+            }
+        state.log_event(sid, "snapshot_diff_failed", str(exc))
+        try:
+            snapshot_bytes, _, _ = build_snapshot_artifacts(
+                export_data,
+                base_url,
+            )
+        except Exception as snapshot_exc:
+            state.log_event(sid, "snapshot_artifact_failed", str(snapshot_exc))
+            return {
+                "snapshot_changes": [],
+                "snapshot_baseline_available": False,
+            }
+
+    snapshot_path = output_dir / (
+        f"{domain}-{timestamp}.audit-snapshot-v1.json.gz"
+    )
+    snapshot_path.write_bytes(snapshot_bytes)
+    state.add_artifact(sid, "audit_snapshot", snapshot_path)
+
+    if baseline_available:
+        diff_path = output_dir / f"{domain}-{timestamp}.crawl-diff.csv"
+        diff_path.write_text(diff_csv, encoding="utf-8", newline="")
+        state.add_artifact(sid, "crawl_diff_csv", diff_path)
+
+    return {
+        "snapshot_changes": changes,
+        "snapshot_baseline_available": baseline_available,
+    }
 
 
 # ── AIMD adaptive controller ──────────────────────────────────────────────────
@@ -472,9 +537,19 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
                 "site_check": site_data,
                 "pages": pages,
                 "links": links or [],
+                "completeness": completeness,
             }
+            snapshot_data = _prepare_snapshot_artifacts(
+                sid,
+                export_data,
+                url,
+                domain,
+                timestamp,
+                REPORTS_DIR,
+            )
             v3_findings, coverage_rows, coverage_csv = run_v3_pipeline(
                 export_data=export_data,
+                existing_data=snapshot_data,
                 base_url=url,
                 completeness=completeness,
             )

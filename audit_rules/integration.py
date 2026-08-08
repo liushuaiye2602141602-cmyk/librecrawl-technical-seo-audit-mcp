@@ -23,6 +23,7 @@ Usage (in server.py or runner.py):
 """
 
 import os
+from pathlib import Path
 from typing import Optional, Tuple
 
 # ============================================================
@@ -108,7 +109,11 @@ def run_v3_pipeline(
     runner = _get_runner()
 
     if export_data:
-        findings, coverage_rows = runner.run_from_export(export_data, base_url)
+        findings, coverage_rows = runner.run_from_export(
+            export_data,
+            base_url,
+            existing_data=existing_data,
+        )
     else:
         findings, coverage_rows = runner.run(
             site_data=site_data or {},
@@ -121,6 +126,35 @@ def run_v3_pipeline(
 
     coverage_csv = write_coverage_csv_to_string(coverage_rows)
     return findings, coverage_rows, coverage_csv
+
+
+def build_snapshot_artifacts(
+    export_data: dict,
+    base_url: str,
+    *,
+    baseline_path: str | Path | None = None,
+    created_at: str | None = None,
+) -> tuple[bytes, list, str]:
+    """Build the current snapshot and, when provided, its baseline diff."""
+    from audit_rules.snapshot import (
+        build_snapshot_from_export,
+        load_snapshot,
+        snapshot_to_gzip_bytes,
+    )
+    from audit_rules.snapshot_diff import crawl_diff_csv_to_string, diff_snapshots
+
+    current = build_snapshot_from_export(
+        export_data,
+        base_url,
+        created_at=created_at,
+    )
+    snapshot_bytes = snapshot_to_gzip_bytes(current)
+    if baseline_path is None:
+        return snapshot_bytes, [], ""
+
+    baseline = load_snapshot(baseline_path)
+    changes = diff_snapshots(baseline, current)
+    return snapshot_bytes, changes, crawl_diff_csv_to_string(changes)
 
 
 def augment_zip_with_coverage(zip_files: dict, coverage_csv: str) -> dict:
