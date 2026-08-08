@@ -176,12 +176,12 @@ class TestPhase3EnhancedClassification:
         expected = {
             19: "EXISTING_PARTIAL",
             20: "EXISTING_PARTIAL",
-            21: "NEW_EXTERNAL_DATA",
+            21: "EXISTING_PARTIAL",
             22: "EXISTING_PARTIAL",
-            24: "NEW_EXTERNAL_DATA",
+            24: "EXISTING_PARTIAL",
             61: "EXISTING_PARTIAL",
-            62: "NEW_EXTERNAL_DATA",
-            63: "NEW_EXTERNAL_DATA",
+            62: "EXISTING_PARTIAL",
+            63: "EXISTING_PARTIAL",
         }
         for aid, exp_status in expected.items():
             actual = rows[aid]["impl_status"]
@@ -257,8 +257,8 @@ class TestClassificationSemantics:
 class TestAdapterClassificationIntegrity:
     """Adapters exist for 39 rules, but CSV classifications remain diverse."""
 
-    def test_adapters_span_multiple_csv_classifications(self):
-        """Adapters should span EXISTING_FULL, EXISTING_PARTIAL, and NEW_EXTERNAL_DATA."""
+    def test_adapters_are_only_classified_as_implemented(self):
+        """Registered adapters must not remain classified as unimplemented external rules."""
         from audit_rules.adapters import CompatibilityHarness
         registry = _load_registry()
         harness = CompatibilityHarness(registry)
@@ -273,7 +273,7 @@ class TestAdapterClassificationIntegrity:
 
         assert "EXISTING_FULL" in statuses, "Adapters should cover EXISTING_FULL rules"
         assert "EXISTING_PARTIAL" in statuses, "Adapters should cover EXISTING_PARTIAL rules"
-        assert "NEW_EXTERNAL_DATA" in statuses, "Adapters should cover NEW_EXTERNAL_DATA rules"
+        assert "NEW_EXTERNAL_DATA" not in statuses
 
     def test_no_adapter_for_new_manual(self):
         """NEW_MANUAL rules should NOT have adapters (require human review)."""

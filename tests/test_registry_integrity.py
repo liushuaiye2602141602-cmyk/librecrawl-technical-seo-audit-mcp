@@ -340,10 +340,10 @@ class TestCSVLoader:
 
         # Phase 1 validates these counts (updated for Rule 72 MANUAL)
         assert full == 18, f"EXISTING_FULL: expected 18, got {full}"
-        assert partial == 47, f"EXISTING_PARTIAL: expected 47, got {partial}"
+        assert partial == 51, f"EXISTING_PARTIAL: expected 51, got {partial}"
         assert new_auto == 0, f"NEW_AUTO: expected 0 after Phase 4B, got {new_auto}"
         assert new_man == 8, f"NEW_MANUAL: expected 8 after WordPress snapshot rules, got {new_man}"
-        assert new_ext <= 7, f"NEW_EXTERNAL_DATA: expected <=7 after server-log rule, got {new_ext}"
+        assert new_ext == 3, f"NEW_EXTERNAL_DATA: expected 3 remaining provider rules, got {new_ext}"
         assert full + partial + new_auto + new_ext + new_man == 80
 
     def test_missing_csv_raises_error(self):

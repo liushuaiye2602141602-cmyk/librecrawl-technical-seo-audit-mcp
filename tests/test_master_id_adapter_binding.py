@@ -444,7 +444,7 @@ class TestClassificationCrossCheck:
         counts = Counter(r.impl_status.value for r in registry)
 
         assert counts.get("EXISTING_FULL", 0) == 18
-        assert counts.get("EXISTING_PARTIAL", 0) == 47
+        assert counts.get("EXISTING_PARTIAL", 0) == 51
         assert counts.get("NEW_AUTO", 0) == 0
-        assert counts.get("NEW_EXTERNAL_DATA", 0) == 7
+        assert counts.get("NEW_EXTERNAL_DATA", 0) == 3
         assert counts.get("NEW_MANUAL", 0) == 8

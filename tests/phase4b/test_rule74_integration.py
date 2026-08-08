@@ -167,7 +167,7 @@ def test_rule74_registered_and_zero_new_auto() -> None:
     assert len(harness._adapters) == 69
     assert counts == {
         "EXISTING_FULL": 18,
-            "EXISTING_PARTIAL": 47,
-        "NEW_EXTERNAL_DATA": 7,
+            "EXISTING_PARTIAL": 51,
+            "NEW_EXTERNAL_DATA": 3,
             "NEW_MANUAL": 8,
     }

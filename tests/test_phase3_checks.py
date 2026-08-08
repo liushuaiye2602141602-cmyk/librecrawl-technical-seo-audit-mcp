@@ -610,6 +610,15 @@ class TestPhase3AdapterRegistration:
             f"Expected 69 adapters through Phase 9, got {len(harness._adapters)}"
         )
 
+    def test_psi_backed_rules_are_classified_partial_not_unimplemented_external(self):
+        from audit_rules.registry import load_registry
+
+        rules = {rule.audit_id: rule for rule in load_registry()}
+        for audit_id in (21, 24, 62, 63):
+            assert rules[audit_id].impl_status.value == "EXISTING_PARTIAL"
+            assert rules[audit_id].required_data_sources == ["PageSpeed API"]
+            assert rules[audit_id].automatable is True
+
     def test_phase3_rule_ids_registered(self):
         from audit_rules.adapters import CompatibilityHarness
         from audit_rules.registry import load_registry
