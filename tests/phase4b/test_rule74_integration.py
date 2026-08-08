@@ -152,7 +152,7 @@ def test_rule74_fixed_and_informational_changes_are_info() -> None:
     assert [item.severity for item in findings] == ["Info", "Info"]
 
 
-def test_rule74_registered_as_48th_adapter_and_zero_new_auto() -> None:
+def test_rule74_registered_and_zero_new_auto() -> None:
     """Forgetting CSV or adapter registration must break source-of-truth facts."""
     from collections import Counter
 
@@ -164,7 +164,7 @@ def test_rule74_registered_as_48th_adapter_and_zero_new_auto() -> None:
     counts = Counter(rule.impl_status.value for rule in registry)
 
     assert harness._adapters["regression_test"].__name__ == "check_regression_test"
-    assert len(harness._adapters) == 48
+    assert len(harness._adapters) == 55
     assert counts == {
         "EXISTING_FULL": 18,
         "EXISTING_PARTIAL": 33,

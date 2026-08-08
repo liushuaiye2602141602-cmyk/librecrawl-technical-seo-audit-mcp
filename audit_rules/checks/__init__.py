@@ -69,7 +69,16 @@ def _import_all():
         "international": ["check_language_hreflang_match"],
         "wordpress": ["check_seo_plugin_conflict"],
         "form_accessibility": ["check_form_accessibility"],
-        "audit_deliverables": ["generate_task_csv"],
+        "audit_deliverables": ["generate_task_csv", "check_audit_deliverables"],
+        # Phase 4C — previously unbound EXISTING_PARTIAL rules
+        "foundation_gaps": [
+            "check_xml_sitemap_valid",
+            "check_crawl_budget_waste",
+            "check_title_uniqueness",
+            "check_cache_cdn",
+            "check_https_certificate",
+            "check_cache_plugin_cdn_synergy",
+        ],
         # Phase 3
         "performance": [
             "check_core_web_vitals",
@@ -114,6 +123,11 @@ __all__ = [
     "check_breadcrumb", "check_schema_conflict", "check_schema_vs_visible",
     "check_image_alt_quality", "check_language_hreflang_match",
     "check_seo_plugin_conflict", "check_form_accessibility", "generate_task_csv",
+    "check_audit_deliverables",
+    # Phase 4C
+    "check_xml_sitemap_valid", "check_crawl_budget_waste",
+    "check_title_uniqueness", "check_cache_cdn",
+    "check_https_certificate", "check_cache_plugin_cdn_synergy",
     # Phase 3
     "check_core_web_vitals", "check_ttfb", "check_render_blocking",
     "check_image_performance", "check_mobile_experience",

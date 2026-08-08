@@ -29,10 +29,14 @@ def _export() -> dict:
 
 
 def test_unregistered_partial_rule_is_not_false_pass():
+    from audit_rules.adapters import CompatibilityHarness
     from audit_rules.registry import load_registry
     from audit_rules.runner import RuleRunner
 
-    _, rows = RuleRunner(load_registry()).run_from_export(
+    registry = load_registry()
+    harness = CompatibilityHarness(registry)
+    harness._adapters.pop("audit_deliverables")
+    _, rows = RuleRunner(registry, harness=harness).run_from_export(
         _export(), "https://example.com"
     )
     rule40 = next(row for row in rows if row.audit_id == 40)

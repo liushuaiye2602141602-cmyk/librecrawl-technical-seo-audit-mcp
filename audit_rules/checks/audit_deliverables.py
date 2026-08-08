@@ -5,7 +5,8 @@ Only active when MASTER_AUDIT_V3_ENABLED=true.
 
 CSV columns:
   audit_id, rule_id, category, priority, url, finding, evidence,
-  seo_impact, remediation, owner, acceptance_criteria, status
+  seo_impact, remediation, owner, assignee, due_date, acceptance_criteria,
+  status, verification_status
 """
 
 import csv
@@ -14,6 +15,8 @@ from typing import Optional
 
 from audit_rules.models import RuleDefinition, Finding, CoverageRow
 from audit_rules.categories import Priority
+from audit_rules.adapters import DataUnavailableError
+from audit_rules.context import PageContext, SiteContext
 
 
 # Priority sort order: Critical first, then High, Medium, Low
@@ -35,9 +38,21 @@ TASK_CSV_COLUMNS = [
     "seo_impact",
     "remediation",
     "owner",
+    "assignee",
+    "due_date",
     "acceptance_criteria",
     "status",
+    "verification_status",
 ]
+
+
+def _safe_cell(value: object) -> object:
+    """Neutralize spreadsheet formulas while preserving ordinary values."""
+    if not isinstance(value, str):
+        return value
+    if value.startswith(("=", "+", "-", "@", "\t", "\r")):
+        return "'" + value
+    return value
 
 
 def _sort_key(finding: Finding) -> tuple:
@@ -85,22 +100,37 @@ def generate_task_csv(
         owner = rule.owner if rule else ""
         acceptance = rule.acceptance_criteria if rule else ""
 
-        writer.writerow([
+        writer.writerow([_safe_cell(value) for value in [
             f.audit_id,
             f.rule_id,
             f.category or "",
             f.priority or "",
             f.url or "",
-            f.detail or f.detected or "",
+            f.finding_detail or f.detected_value or "",
             f.evidence or "",
             "",  # seo_impact — filled manually or by future enhancement
-            remediation,
-            owner,
+            f.remediation or remediation,
+            f.owner or owner,
+            f.owner or owner,
+            "",  # due_date — intentionally assigned by the project owner
             acceptance,
             "open",  # default status
-        ])
+            "pending",
+        ]])
 
     return output.getvalue()
+
+
+def check_audit_deliverables(
+    rule: RuleDefinition,
+    site_ctx: SiteContext,
+    page_contexts: list[PageContext],
+    data: dict,
+) -> list[Finding]:
+    """Rule 40 execution marker for the post-findings task artifact stage."""
+    if data.get("deliverable_pipeline_available") is not True:
+        raise DataUnavailableError("Deliverable pipeline unavailable")
+    return []
 
 
 def generate_task_csv_file(

@@ -112,19 +112,21 @@ def run_v3_pipeline(
     from audit_rules.writer import write_coverage_csv_to_string
 
     runner = _get_runner()
+    pipeline_data = dict(existing_data or {})
+    pipeline_data.setdefault("deliverable_pipeline_available", True)
 
     if export_data:
         findings, coverage_rows = runner.run_from_export(
             export_data,
             base_url,
-            existing_data=existing_data,
+            existing_data=pipeline_data,
         )
     else:
         findings, coverage_rows = runner.run(
             site_data=site_data or {},
             pages=pages or [],
             links=links or [],
-            existing_data=existing_data or {},
+            existing_data=pipeline_data,
             base_url=base_url,
             completeness=completeness,
         )

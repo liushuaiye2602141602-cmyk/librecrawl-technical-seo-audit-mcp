@@ -43,6 +43,7 @@ class CoverageManager:
         findings: list[Finding],
         providers_available: set[str] | None = None,
         executed_rule_ids: set[int] | None = None,
+        partially_executed_rule_ids: set[int] | None = None,
         not_checked_reasons: dict[int, str] | None = None,
     ) -> list[CoverageRow]:
         """Compute 80 CoverageRow entries from registry + contexts + findings.
@@ -73,6 +74,7 @@ class CoverageManager:
             exec_status, result_status, reason = self._evaluate_coverage(
                 rule, rule_findings, site_ctx, page_contexts,
                 total_pages, providers_available, executed_rule_ids,
+                partially_executed_rule_ids,
                 not_checked_reasons,
             )
 
@@ -118,6 +120,7 @@ class CoverageManager:
         total_pages: int,
         providers_available: set[str],
         executed_rule_ids: set[int] | None,
+        partially_executed_rule_ids: set[int] | None,
         not_checked_reasons: dict[int, str],
     ) -> tuple[ExecutionStatus, ResultStatus, str]:
         """Determine ExecutionStatus + ResultStatus for a single rule.
@@ -157,13 +160,21 @@ class CoverageManager:
                 ),
             )
 
+        partial_reason = ""
+        if partially_executed_rule_ids and rule.audit_id in partially_executed_rule_ids:
+            partial_reason = not_checked_reasons.get(rule.audit_id, "Partial evidence")
+
         # No findings → was it executed?
         if not findings:
             # If the rule is automatable and all required providers are available,
             # it was executed (ran and found nothing → pass)
             if rule.automatable:
                 # Case A: Executed, found nothing → PASS
-                return ExecutionStatus.EXECUTED_FULL, ResultStatus.PASS, ""
+                status = (
+                    ExecutionStatus.EXECUTED_PARTIAL
+                    if partial_reason else ExecutionStatus.EXECUTED_FULL
+                )
+                return status, ResultStatus.PASS, partial_reason
             else:
                 # Should not reach here (non-automatable is either NEW_MANUAL or EXTERNAL_DATA)
                 return ExecutionStatus.NOT_CHECKED, ResultStatus.UNKNOWN, "Not executed"
@@ -191,7 +202,9 @@ class CoverageManager:
         else:
             exec_status = ExecutionStatus.EXECUTED_FULL
 
-        return exec_status, result, ""
+        if partial_reason:
+            exec_status = ExecutionStatus.EXECUTED_PARTIAL
+        return exec_status, result, partial_reason
 
     def _check_applicability(self, rule: RuleDefinition, site_ctx: SiteContext) -> str:
         """Check if rule is applicable to this site. Returns reason if NOT_APPLICABLE."""

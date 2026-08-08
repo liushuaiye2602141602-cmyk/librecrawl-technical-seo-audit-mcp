@@ -164,9 +164,11 @@ class TestAdapterRegistration:
     PHASE3_IDS = {19, 20, 21, 22, 24, 61, 62, 63}
     PHASE4A_IDS = {18, 32, 39, 43, 47, 51, 60, 67}
     PHASE4B_IDS = {74}
+    PHASE4C_IDS = {2, 5, 13, 23, 25, 40, 66}
     ALL_ADAPTER_IDS = (
-        PHASE1_IDS | PHASE2_IDS | PHASE3_IDS | PHASE4A_IDS | PHASE4B_IDS
-    )  # 48 rules with adapters
+        PHASE1_IDS | PHASE2_IDS | PHASE3_IDS | PHASE4A_IDS | PHASE4B_IDS |
+        PHASE4C_IDS
+    )  # 55 rules with adapters
 
     def test_all_adapters_registered(self, harness):
         """Each rule with an adapter must have it registered (32 total)."""
@@ -203,8 +205,8 @@ class TestAdapterRegistration:
 
     def test_total_adapter_count(self, harness):
         """Exactly 48 adapters total through Phase 4B."""
-        assert len(harness._adapters) == 48, (
-            f"Expected 48 total adapters, got {len(harness._adapters)}"
+        assert len(harness._adapters) == 55, (
+            f"Expected 55 total adapters, got {len(harness._adapters)}"
         )
 
 
@@ -508,6 +510,8 @@ class TestHarnessIntegration:
 
     def test_each_adapter_is_callable(self, harness, sample_site_ctx, sample_pages):
         """Each registered adapter function must be callable."""
+        from audit_rules.adapters import DataUnavailableError
+
         for rule_id, adapter in harness._adapters.items():
             rule = None
             for r in harness.registry:
@@ -515,6 +519,8 @@ class TestHarnessIntegration:
                     rule = r
                     break
             assert rule is not None
-            # Should not raise
-            result = adapter(rule, sample_site_ctx, sample_pages, {})
+            try:
+                result = adapter(rule, sample_site_ctx, sample_pages, {})
+            except DataUnavailableError:
+                continue
             assert isinstance(result, list)

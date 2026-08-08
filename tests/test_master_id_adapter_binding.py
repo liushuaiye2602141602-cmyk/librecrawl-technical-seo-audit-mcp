@@ -104,6 +104,14 @@ MASTER_ID_ADAPTER_MAP = {
     67: "check_staging_indexability",
     # Phase 4B (portable snapshot comparison)
     74: "check_regression_test",
+    # Phase 4C (previously unbound EXISTING_PARTIAL rules)
+    2: "check_xml_sitemap_valid",
+    5: "check_crawl_budget_waste",
+    13: "check_title_uniqueness",
+    23: "check_cache_cdn",
+    25: "check_https_certificate",
+    40: "check_audit_deliverables",
+    66: "check_cache_plugin_cdn_synergy",
 }
 
 
@@ -254,12 +262,14 @@ class TestAdapterRegistration:
             18, 32, 39, 43, 47, 51, 60, 67,
         } | {
             74,
+        } | {
+            2, 5, 13, 23, 25, 40, 66,
         }
 
         # Get all registered adapter rule_ids
         adapter_rule_ids = set(harness._adapters.keys())
-        assert len(adapter_rule_ids) == 48, (
-            f"Expected 48 adapters (18 P1 + 13 P2 + 8 P3 + 8 P4A + 1 P4B), "
+        assert len(adapter_rule_ids) == 55, (
+            f"Expected 55 adapters through Phase 4C, "
             f"got {len(adapter_rule_ids)}: {adapter_rule_ids}"
         )
 
@@ -321,8 +331,8 @@ class TestAdapterRegistration:
         harness = CompatibilityHarness(registry)
 
         func_ids = {id(f) for f in harness._adapters.values()}
-        assert len(func_ids) == 48, (
-            f"Expected 48 unique adapter functions through Phase 4B, "
+        assert len(func_ids) == 55, (
+            f"Expected 55 unique adapter functions through Phase 4C, "
             f"got {len(func_ids)}"
         )
 

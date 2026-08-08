@@ -43,6 +43,14 @@ AdapterFunc = Callable[..., list[Finding]]
 class DataUnavailableError(RuntimeError):
     """Raised when required crawl evidence was not exported."""
 
+
+class PartialExecutionError(DataUnavailableError):
+    """Carry findings when only part of the eligible evidence was available."""
+
+    def __init__(self, reason: str, findings: list[Finding]):
+        super().__init__(reason)
+        self.findings = findings
+
 # Lazy import for Phase 2 checks (avoids import errors when checks/ is being built)
 _PHASE2_CHECKS_LOADED = False
 _PHASE2_CHECKS: dict[str, Callable] = {}
@@ -58,6 +66,10 @@ _PHASE4A_CHECKS: dict[str, Callable] = {}
 # Lazy import for Phase 4B snapshot regression check
 _PHASE4B_CHECKS_LOADED = False
 _PHASE4B_CHECKS: dict[str, Callable] = {}
+
+# Phase 4C: seven previously unbound EXISTING_PARTIAL rules
+_PHASE4C_CHECKS_LOADED = False
+_PHASE4C_CHECKS: dict[str, Callable] = {}
 
 
 def _load_phase2_checks() -> dict[str, Callable]:
@@ -168,6 +180,33 @@ def _load_phase4b_checks() -> dict[str, Callable]:
     return _PHASE4B_CHECKS
 
 
+def _load_phase4c_checks() -> dict[str, Callable]:
+    """Import crawl/header/output checks for previously unbound partial rules."""
+    global _PHASE4C_CHECKS_LOADED, _PHASE4C_CHECKS
+    if _PHASE4C_CHECKS_LOADED:
+        return _PHASE4C_CHECKS
+    try:
+        from audit_rules.checks import get_check
+
+        checks_to_load = {
+            "xml_sitemap_valid": "check_xml_sitemap_valid",
+            "crawl_budget_waste": "check_crawl_budget_waste",
+            "title_uniqueness": "check_title_uniqueness",
+            "cache_cdn": "check_cache_cdn",
+            "https_certificate": "check_https_certificate",
+            "audit_deliverables": "check_audit_deliverables",
+            "cache_plugin_cdn_synergy": "check_cache_plugin_cdn_synergy",
+        }
+        for rule_id, check_name in checks_to_load.items():
+            check = get_check(check_name)
+            if check is not None:
+                _PHASE4C_CHECKS[rule_id] = check
+        _PHASE4C_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE4C_CHECKS
+
+
 @dataclass
 class CompatibilityHarness:
     """Binds EXISTING_FULL (18), EXISTING_PARTIAL (13), and performance (8)
@@ -181,6 +220,7 @@ class CompatibilityHarness:
     registry: list[RuleDefinition]
     _adapters: dict[str, AdapterFunc] = field(default_factory=dict)
     completed_rule_ids: set[int] = field(default_factory=set, init=False)
+    partially_completed_rule_ids: set[int] = field(default_factory=set, init=False)
     not_checked_reasons: dict[int, str] = field(default_factory=dict, init=False)
 
     def __post_init__(self):
@@ -236,6 +276,9 @@ class CompatibilityHarness:
         # ── Phase 4B: Portable before/after snapshot comparison ─────────
         phase4b = _load_phase4b_checks()
         self._adapters.update(phase4b)
+        # Phase 4C: close the seven unbound EXISTING_PARTIAL entries.
+        phase4c = _load_phase4c_checks()
+        self._adapters.update(phase4c)
 
     def run(
         self,
@@ -250,6 +293,7 @@ class CompatibilityHarness:
         """
         all_findings: list[Finding] = []
         self.completed_rule_ids = set()
+        self.partially_completed_rule_ids = set()
         self.not_checked_reasons = {}
         for rule in self.registry:
             if rule.rule_id not in self._adapters:
@@ -259,6 +303,12 @@ class CompatibilityHarness:
                 findings = adapter(rule, site_ctx, page_contexts, existing_data)
                 all_findings.extend(findings)
                 self.completed_rule_ids.add(rule.audit_id)
+            except PartialExecutionError as exc:
+                all_findings.extend(exc.findings)
+                self.completed_rule_ids.add(rule.audit_id)
+                self.partially_completed_rule_ids.add(rule.audit_id)
+                self.not_checked_reasons[rule.audit_id] = str(exc)
+                continue
             except DataUnavailableError as exc:
                 self.not_checked_reasons[rule.audit_id] = str(exc)
                 continue

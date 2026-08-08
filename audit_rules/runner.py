@@ -81,6 +81,16 @@ class RuleRunner:
         available_providers = {"LibreCrawl"}
         if existing_data.get("snapshot_baseline_available") is True:
             available_providers.add("SnapshotBaseline")
+        if any(
+            isinstance((page._raw_export or {}).get("response_headers") or
+                       (page._raw_export or {}).get("headers"), dict)
+            and bool((page._raw_export or {}).get("response_headers") or
+                     (page._raw_export or {}).get("headers"))
+            for page in page_contexts
+        ):
+            available_providers.add("ResponseHeaders")
+        if isinstance(site_data.get("tls_certificate"), dict):
+            available_providers.add("TLSCertificate")
         for name, provider in self.providers.items():
             if provider.is_available():
                 provider_name = provider.name
@@ -136,6 +146,7 @@ class RuleRunner:
             site_ctx, page_contexts, findings,
             providers_available=available_providers,
             executed_rule_ids=self.harness.completed_rule_ids,
+            partially_executed_rule_ids=self.harness.partially_completed_rule_ids,
             not_checked_reasons=self.harness.not_checked_reasons,
         )
 

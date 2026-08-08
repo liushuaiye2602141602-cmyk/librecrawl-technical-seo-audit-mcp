@@ -221,4 +221,7 @@ class TestEndToEndIntegration:
             existing_data={"snapshot_baseline_available": True},
         )
 
-        assert fake_runner.existing_data == {"snapshot_baseline_available": True}
+        assert fake_runner.existing_data == {
+            "snapshot_baseline_available": True,
+            "deliverable_pipeline_available": True,
+        }
