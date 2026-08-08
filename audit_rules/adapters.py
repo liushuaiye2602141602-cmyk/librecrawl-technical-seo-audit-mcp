@@ -75,6 +75,10 @@ _PHASE4C_CHECKS: dict[str, Callable] = {}
 _PHASE5_CHECKS_LOADED = False
 _PHASE5_CHECKS: dict[str, Callable] = {}
 
+# Phase 6: Semrush-backed checks
+_PHASE6_CHECKS_LOADED = False
+_PHASE6_CHECKS: dict[str, Callable] = {}
+
 
 def _load_phase2_checks() -> dict[str, Callable]:
     """Import Phase 2 check functions lazily."""
@@ -234,6 +238,25 @@ def _load_phase5_checks() -> dict[str, Callable]:
     return _PHASE5_CHECKS
 
 
+def _load_phase6_checks() -> dict[str, Callable]:
+    global _PHASE6_CHECKS_LOADED, _PHASE6_CHECKS
+    if _PHASE6_CHECKS_LOADED:
+        return _PHASE6_CHECKS
+    try:
+        from audit_rules.checks import get_check
+        for rule_id, check_name in {
+            "backlink_overview": "check_backlink_overview",
+            "lost_backlinks": "check_lost_backlinks",
+        }.items():
+            check = get_check(check_name)
+            if check is not None:
+                _PHASE6_CHECKS[rule_id] = check
+        _PHASE6_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE6_CHECKS
+
+
 @dataclass
 class CompatibilityHarness:
     """Binds EXISTING_FULL (18), EXISTING_PARTIAL (13), and performance (8)
@@ -308,6 +331,8 @@ class CompatibilityHarness:
         self._adapters.update(phase4c)
         phase5 = _load_phase5_checks()
         self._adapters.update(phase5)
+        phase6 = _load_phase6_checks()
+        self._adapters.update(phase6)
 
     def run(
         self,

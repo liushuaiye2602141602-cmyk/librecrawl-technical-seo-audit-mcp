@@ -340,10 +340,10 @@ class TestCSVLoader:
 
         # Phase 1 validates these counts (updated for Rule 72 MANUAL)
         assert full == 18, f"EXISTING_FULL: expected 18, got {full}"
-        assert partial == 37, f"EXISTING_PARTIAL: expected 37, got {partial}"
+        assert partial == 39, f"EXISTING_PARTIAL: expected 39, got {partial}"
         assert new_auto == 0, f"NEW_AUTO: expected 0 after Phase 4B, got {new_auto}"
         assert new_man >= 12, f"NEW_MANUAL: expected >=12 (Rule 72 included), got {new_man}"
-        assert new_ext <= 13, f"NEW_EXTERNAL_DATA: expected <=13 after GSC rules, got {new_ext}"
+        assert new_ext <= 10, f"NEW_EXTERNAL_DATA: expected <=10 after Semrush rules, got {new_ext}"
         assert full + partial + new_auto + new_ext + new_man == 80
 
     def test_missing_csv_raises_error(self):

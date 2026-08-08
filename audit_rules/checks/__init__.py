@@ -110,6 +110,8 @@ def _import_all():
             "check_device_country_ranking",
             "check_declining_page_keyword_map",
         ],
+        # Phase 6: Semrush Backlinks API
+        "semrush": ["check_backlink_overview", "check_lost_backlinks"],
     }
     for mod, names in modules.items():
         _IMPORTS.update(_lazy_import(mod, names))
@@ -153,5 +155,7 @@ __all__ = [
     # Phase 5
     "check_google_selected_canonical", "check_keyword_cannibalization",
     "check_device_country_ranking", "check_declining_page_keyword_map",
+    # Phase 6
+    "check_backlink_overview", "check_lost_backlinks",
     "get_check",
 ]
