@@ -79,6 +79,8 @@ class RuleRunner:
 
         # Step 2: Enrich with registered providers (Phase 3+ — no-op in Phase 1)
         available_providers = {"LibreCrawl"}
+        if existing_data.get("snapshot_baseline_available") is True:
+            available_providers.add("SnapshotBaseline")
         for name, provider in self.providers.items():
             if provider.is_available():
                 available_providers.add(name)
@@ -138,6 +140,7 @@ class RuleRunner:
         self,
         export_data: dict,
         base_url: str = "",
+        existing_data: dict | None = None,
     ) -> tuple[list[Finding], list[CoverageRow]]:
         """Convenience: run from a single export data dict.
 
@@ -151,14 +154,16 @@ class RuleRunner:
         Returns:
             (findings, coverage_rows) tuple
         """
+        shared_data = {
+            "extended_checks": export_data.get("extended_checks", {}),
+            "crawl": export_data.get("crawl", {}),
+        }
+        shared_data.update(existing_data or {})
         return self.run(
             site_data=export_data.get("site_check", {}),
             pages=export_data.get("pages", []),
             links=export_data.get("links", []),
-            existing_data={
-                "extended_checks": export_data.get("extended_checks", {}),
-                "crawl": export_data.get("crawl", {}),
-            },
+            existing_data=shared_data,
             base_url=base_url,
             completeness=export_data.get("completeness"),
         )

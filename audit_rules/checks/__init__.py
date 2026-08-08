@@ -27,6 +27,9 @@ Phase 4A (8 checks, NEW_AUTO stateless rules, crawl data only):
                              60 (multi-language canonical),
                              67 (staging/dev indexability)
 
+Phase 4B (1 check, portable crawl comparison):
+    snapshot_diff.py       — Rule 74 (before/after regression test)
+
 Checks follow the adapter pattern:
     check_<rule>(rule, site_ctx, page_contexts, data) -> list[Finding]
 """
@@ -89,6 +92,8 @@ def _import_all():
             "check_multilang_canonical",
             "check_staging_indexability",
         ],
+        # Phase 4B
+        "snapshot_diff": ["check_regression_test"],
     }
     for mod, names in modules.items():
         _IMPORTS.update(_lazy_import(mod, names))
@@ -122,5 +127,7 @@ __all__ = [
     "check_internal_redirect_links",
     "check_multilang_canonical",
     "check_staging_indexability",
+    # Phase 4B
+    "check_regression_test",
     "get_check",
 ]

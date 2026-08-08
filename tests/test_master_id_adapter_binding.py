@@ -102,6 +102,8 @@ MASTER_ID_ADAPTER_MAP = {
     51: "check_internal_redirect_links",
     60: "check_multilang_canonical",
     67: "check_staging_indexability",
+    # Phase 4B (portable snapshot comparison)
+    74: "check_regression_test",
 }
 
 
@@ -243,19 +245,21 @@ class TestAdapterRegistration:
         registry = load_registry()
         harness = CompatibilityHarness(registry)
 
-        # Expected set: 18 Phase 1 + 13 Phase 2 + 8 Phase 3 + 8 Phase 4A = 47
+        # Expected set: 18 P1 + 13 P2 + 8 P3 + 8 P4A + 1 P4B = 48
         ALL_ADAPTER_MASTER_IDS = EXISTING_FULL_MASTER_IDS | {
             10, 12, 16, 17, 28, 37, 38, 49, 50, 59, 70, 78, 79,
         } | {
             19, 20, 21, 22, 24, 61, 62, 63,
         } | {
             18, 32, 39, 43, 47, 51, 60, 67,
+        } | {
+            74,
         }
 
         # Get all registered adapter rule_ids
         adapter_rule_ids = set(harness._adapters.keys())
-        assert len(adapter_rule_ids) == 47, (
-            f"Expected 47 adapters (18 P1 + 13 P2 + 8 P3 + 8 P4A), "
+        assert len(adapter_rule_ids) == 48, (
+            f"Expected 48 adapters (18 P1 + 13 P2 + 8 P3 + 8 P4A + 1 P4B), "
             f"got {len(adapter_rule_ids)}: {adapter_rule_ids}"
         )
 
@@ -317,8 +321,8 @@ class TestAdapterRegistration:
         harness = CompatibilityHarness(registry)
 
         func_ids = {id(f) for f in harness._adapters.values()}
-        assert len(func_ids) == 47, (
-            f"Expected 47 unique adapter functions (18 P1 + 13 P2 + 8 P3 + 8 P4A), "
+        assert len(func_ids) == 48, (
+            f"Expected 48 unique adapter functions through Phase 4B, "
             f"got {len(func_ids)}"
         )
 
@@ -388,7 +392,7 @@ class TestClassificationCrossCheck:
         assert sum(counts.values()) == 80
 
     def test_classification_counts_match_expected_distribution(self):
-        """Verify: 18/24/9/16/13 = 80."""
+        """Verify the post-Phase-4B implementation distribution totals 80."""
         from audit_rules.registry import load_registry
         from collections import Counter
 
@@ -401,7 +405,7 @@ class TestClassificationCrossCheck:
         counts = Counter(r.impl_status.value for r in registry)
 
         assert counts.get("EXISTING_FULL", 0) == 18
-        assert counts.get("EXISTING_PARTIAL", 0) == 32
-        assert counts.get("NEW_AUTO", 0) == 1  # Rule 74 only (Phase 4B deferred)
+        assert counts.get("EXISTING_PARTIAL", 0) == 33
+        assert counts.get("NEW_AUTO", 0) == 0
         assert counts.get("NEW_EXTERNAL_DATA", 0) == 16
         assert counts.get("NEW_MANUAL", 0) == 13

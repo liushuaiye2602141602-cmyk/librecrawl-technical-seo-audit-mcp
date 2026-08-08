@@ -3,7 +3,7 @@
 Programmatically verifies the NEW_AUTO rule set from the CSV source of truth.
 
 Phase 4A target (8 rules):  {18, 32, 39, 43, 47, 51, 60, 67}
-Phase 4B deferred (1 rule): {74}
+Phase 4B completed (1 rule): {74}
 """
 
 import csv
@@ -17,7 +17,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 PHASE4A_RULE_IDS = {18, 32, 39, 43, 47, 51, 60, 67}
 PHASE4B_RULE_IDS = {74}
-ALL_NEW_AUTO_IDS = PHASE4A_RULE_IDS | PHASE4B_RULE_IDS
 
 
 def _load_csv() -> dict[int, dict]:
@@ -34,24 +33,19 @@ def _load_csv() -> dict[int, dict]:
 class TestNEWAUTORuleSet:
     """Verify the NEW_AUTO rule set matches expectations."""
 
-    def test_new_auto_count_is_1(self):
-        """CSV has exactly 1 NEW_AUTO rule (Rule 74, deferred to Phase 4B)."""
+    def test_new_auto_count_is_zero(self):
+        """CSV has zero NEW_AUTO rules after Phase 4B."""
         rows = _load_csv()
         new_auto = {aid for aid, r in rows.items()
                     if r["impl_status"] == "NEW_AUTO"}
-        assert len(new_auto) == 1, (
-            f"Expected 1 NEW_AUTO (Rule 74), got {len(new_auto)}: {sorted(new_auto)}"
-        )
+        assert new_auto == set()
 
-    def test_new_auto_ids_match_expected(self):
-        """NEW_AUTO IDs are exactly {74} (Phase 4B deferred only)."""
+    def test_new_auto_ids_are_empty(self):
+        """No implemented Phase 4 rule remains NEW_AUTO."""
         rows = _load_csv()
         new_auto = {aid for aid, r in rows.items()
                     if r["impl_status"] == "NEW_AUTO"}
-        assert new_auto == PHASE4B_RULE_IDS, (
-            f"Mismatch: extra={new_auto - PHASE4B_RULE_IDS}, "
-            f"missing={PHASE4B_RULE_IDS - new_auto}"
-        )
+        assert not new_auto
 
     def test_phase4a_rules_now_existing_partial(self):
         """All 8 Phase 4A rules are now EXISTING_PARTIAL in CSV."""
@@ -62,10 +56,11 @@ class TestNEWAUTORuleSet:
                 f"got {rows[aid]['impl_status']}"
             )
 
-    def test_phase4b_rule_74_is_new_auto(self):
-        """Rule 74 is NEW_AUTO and deferred to Phase 4B."""
+    def test_phase4b_rule_74_is_existing_partial(self):
+        """Rule 74 is implemented but requires an exported baseline at runtime."""
         rows = _load_csv()
-        assert rows[74]["impl_status"] == "NEW_AUTO"
+        assert rows[74]["impl_status"] == "EXISTING_PARTIAL"
+        assert rows[74]["current_check_name"] == "check_regression_test"
 
     def test_phase4a_and_phase4b_disjoint(self):
         """Phase 4A and 4B sets are disjoint."""

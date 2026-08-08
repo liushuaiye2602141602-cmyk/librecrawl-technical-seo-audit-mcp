@@ -51,6 +51,10 @@ _PHASE3_CHECKS: dict[str, Callable] = {}
 _PHASE4A_CHECKS_LOADED = False
 _PHASE4A_CHECKS: dict[str, Callable] = {}
 
+# Lazy import for Phase 4B snapshot regression check
+_PHASE4B_CHECKS_LOADED = False
+_PHASE4B_CHECKS: dict[str, Callable] = {}
+
 
 def _load_phase2_checks() -> dict[str, Callable]:
     """Import Phase 2 check functions lazily."""
@@ -143,6 +147,23 @@ def _load_phase4a_checks() -> dict[str, Callable]:
     return _PHASE4A_CHECKS
 
 
+def _load_phase4b_checks() -> dict[str, Callable]:
+    """Import the Phase 4B snapshot comparison check lazily."""
+    global _PHASE4B_CHECKS_LOADED, _PHASE4B_CHECKS
+    if _PHASE4B_CHECKS_LOADED:
+        return _PHASE4B_CHECKS
+    try:
+        from audit_rules.checks import get_check
+
+        check = get_check("check_regression_test")
+        if check is not None:
+            _PHASE4B_CHECKS["regression_test"] = check
+        _PHASE4B_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE4B_CHECKS
+
+
 @dataclass
 class CompatibilityHarness:
     """Binds EXISTING_FULL (18), EXISTING_PARTIAL (13), and performance (8)
@@ -206,6 +227,9 @@ class CompatibilityHarness:
         # ── Phase 4A: NEW_AUTO stateless rules ────────────────────────────
         phase4a = _load_phase4a_checks()
         self._adapters.update(phase4a)
+        # ── Phase 4B: Portable before/after snapshot comparison ─────────
+        phase4b = _load_phase4b_checks()
+        self._adapters.update(phase4b)
 
     def run(
         self,

@@ -340,8 +340,8 @@ class TestCSVLoader:
 
         # Phase 1 validates these counts (updated for Rule 72 MANUAL)
         assert full == 18, f"EXISTING_FULL: expected 18, got {full}"
-        assert partial == 32, f"EXISTING_PARTIAL: expected 32, got {partial}"
-        assert new_auto == 1, f"NEW_AUTO: expected 1 (Rule 74 Phase 4B deferred), got {new_auto}"
+        assert partial == 33, f"EXISTING_PARTIAL: expected 33, got {partial}"
+        assert new_auto == 0, f"NEW_AUTO: expected 0 after Phase 4B, got {new_auto}"
         assert new_man >= 12, f"NEW_MANUAL: expected >=12 (Rule 72 included), got {new_man}"
         assert new_ext <= 17, f"NEW_EXTERNAL_DATA: expected <=17 (Rule 72 moved), got {new_ext}"
         assert full + partial + new_auto + new_ext + new_man == 80
