@@ -120,6 +120,9 @@ MASTER_ID_ADAPTER_MAP = {
     # Phase 6 (Semrush)
     31: "check_backlink_overview",
     77: "check_lost_backlinks",
+    # Phase 7 (GA4)
+    34: "check_gsc_ga4_config",
+    35: "check_event_conversion_tracking",
 }
 
 
@@ -276,12 +279,14 @@ class TestAdapterRegistration:
             44, 52, 75, 76,
         } | {
             31, 77,
+        } | {
+            34, 35,
         }
 
         # Get all registered adapter rule_ids
         adapter_rule_ids = set(harness._adapters.keys())
-        assert len(adapter_rule_ids) == 61, (
-            f"Expected 61 adapters through Phase 6, "
+        assert len(adapter_rule_ids) == 63, (
+            f"Expected 63 adapters through Phase 7, "
             f"got {len(adapter_rule_ids)}: {adapter_rule_ids}"
         )
 
@@ -343,8 +348,8 @@ class TestAdapterRegistration:
         harness = CompatibilityHarness(registry)
 
         func_ids = {id(f) for f in harness._adapters.values()}
-        assert len(func_ids) == 61, (
-            f"Expected 61 unique adapter functions through Phase 6, "
+        assert len(func_ids) == 63, (
+            f"Expected 63 unique adapter functions through Phase 7, "
             f"got {len(func_ids)}"
         )
 
@@ -427,7 +432,7 @@ class TestClassificationCrossCheck:
         counts = Counter(r.impl_status.value for r in registry)
 
         assert counts.get("EXISTING_FULL", 0) == 18
-        assert counts.get("EXISTING_PARTIAL", 0) == 39
+        assert counts.get("EXISTING_PARTIAL", 0) == 41
         assert counts.get("NEW_AUTO", 0) == 0
-        assert counts.get("NEW_EXTERNAL_DATA", 0) == 10
+        assert counts.get("NEW_EXTERNAL_DATA", 0) == 8
         assert counts.get("NEW_MANUAL", 0) == 13

@@ -79,6 +79,10 @@ _PHASE5_CHECKS: dict[str, Callable] = {}
 _PHASE6_CHECKS_LOADED = False
 _PHASE6_CHECKS: dict[str, Callable] = {}
 
+# Phase 7: GA4-backed checks
+_PHASE7_CHECKS_LOADED = False
+_PHASE7_CHECKS: dict[str, Callable] = {}
+
 
 def _load_phase2_checks() -> dict[str, Callable]:
     """Import Phase 2 check functions lazily."""
@@ -257,6 +261,25 @@ def _load_phase6_checks() -> dict[str, Callable]:
     return _PHASE6_CHECKS
 
 
+def _load_phase7_checks() -> dict[str, Callable]:
+    global _PHASE7_CHECKS_LOADED, _PHASE7_CHECKS
+    if _PHASE7_CHECKS_LOADED:
+        return _PHASE7_CHECKS
+    try:
+        from audit_rules.checks import get_check
+        for rule_id, check_name in {
+            "gsc_ga4_config": "check_gsc_ga4_config",
+            "event_conversion_tracking": "check_event_conversion_tracking",
+        }.items():
+            check = get_check(check_name)
+            if check is not None:
+                _PHASE7_CHECKS[rule_id] = check
+        _PHASE7_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE7_CHECKS
+
+
 @dataclass
 class CompatibilityHarness:
     """Binds EXISTING_FULL (18), EXISTING_PARTIAL (13), and performance (8)
@@ -333,6 +356,8 @@ class CompatibilityHarness:
         self._adapters.update(phase5)
         phase6 = _load_phase6_checks()
         self._adapters.update(phase6)
+        phase7 = _load_phase7_checks()
+        self._adapters.update(phase7)
 
     def run(
         self,
