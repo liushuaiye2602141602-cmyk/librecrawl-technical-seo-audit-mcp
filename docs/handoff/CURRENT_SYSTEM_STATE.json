@@ -1,12 +1,12 @@
 {
   "generated_at": "2026-08-09T05:12:54+08:00",
   "git_branch": "feat/master-audit-completion",
-  "git_head": "aba10ceed82aebb91b156c67135b8e5bd7e48434",
-  "git_commit_short": "aba10ce",
+  "git_head": "49a29a74c3d268a446ed4242b31c0fe17a116713",
+  "git_commit_short": "49a29a7",
   "python": "3.14.5",
   "tests": {
-    "collected": 514,
-    "passed": 514,
+    "collected": 540,
+    "passed": 540,
     "failed": 0,
     "skipped": 0
   },
@@ -22,7 +22,8 @@
       "NEW_MANUAL": 13,
       "NEW_AUTO": 0
     },
-    "adapter_count": 48,
+    "adapter_count": 55,
+    "partial_rules_without_adapters": 0,
     "phase4a_completed_rules": [18, 32, 39, 43, 47, 51, 60, 67],
     "phase4b_completed_rules": [74],
     "phase4b_deferred_rules": []

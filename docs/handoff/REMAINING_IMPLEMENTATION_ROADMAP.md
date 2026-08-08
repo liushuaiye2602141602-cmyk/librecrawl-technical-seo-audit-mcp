@@ -1,7 +1,7 @@
 # Remaining Implementation Roadmap — Codex Handoff
 
 **Date:** 2026-08-09
-**Current checkpoint:** 48 adapters, 514 tests passing after PSI live validation, commit `aba10ce`
+**Current checkpoint:** 55 adapters, 540 tests passing after local PARTIAL gap closure, commit `49a29a7`
 **Goal:** 80/80 rules fully implemented, all providers live-validated, ≥1,200 tests
 **Related:** [CURRENT_RULE_MATRIX.csv](CURRENT_RULE_MATRIX.csv) | [BLOCKERS_AND_CREDENTIALS.md](BLOCKERS_AND_CREDENTIALS.md)
 
@@ -119,7 +119,10 @@ validated live against `https://example.com/`; see
 
 ## Workstream 3: EXISTING_PARTIAL Gap Closure
 
-**Priority:** P0 — maximizes value from already-implemented adapters
+**Status:** LOCAL/CRAWL EVIDENCE COMPLETE on 2026-08-09. All seven previously
+unbound rules now have adapters. Remaining external evidence is owned by the
+provider workstreams; see `docs/audit/PARTIAL_GAP_CLOSURE_REPORT.md`.
+**Priority:** Completed for locally available evidence
 **Depends on:** Nothing (all are crawl-data-only improvements)
 
 ### 3.1 Rules with Adapters But Significant Remaining Gaps

@@ -1,16 +1,16 @@
 # Codex Handoff — Master SEO Audit System
 
 **Handoff Date:** 2026-08-09
-**Git Commit:** `aba10ce` — `fix: connect pagespeed provider to v3 pipeline`
+**Git Commit:** `49a29a7` — `feat: bind remaining partial crawl checks`
 **Branch:** `feat/master-audit-completion`
-**Tests:** 514 passed, 0 failed
+**Tests:** 540 passed, 0 failed
 **Handoff Type:** COMPLETE PROJECT HANDOFF — build the ENTIRE remaining system
 
 ---
 
 ## 1. What This Project Is
 
-A **Master Technical SEO Audit System** that evaluates 80 SEO rules against crawled website data. It ingests LibreCrawl exports, runs 48 implemented check functions against page-level and site-level data, and produces structured findings (CSV reports, JSON artifacts).
+A **Master Technical SEO Audit System** that evaluates 80 SEO rules against crawled website data. It ingests LibreCrawl exports, runs 55 implemented check functions against page-level and site-level data, and produces structured findings (CSV reports, JSON artifacts).
 
 **Core architecture:** crawl once → normalize once → evaluate many rules (NOT N rules × N pages × HTTP refetch).
 
@@ -23,9 +23,9 @@ A **Master Technical SEO Audit System** that evaluates 80 SEO rules against craw
 | Metric | Value |
 |--------|-------|
 | Total rules | 80 (IDs 1..80) |
-| Rules with working adapters | 48 |
-| Rules without adapters | 32 |
-| Tests | 514 passing |
+| Rules with working adapters | 55 |
+| EXISTING_PARTIAL rules without adapters | 0 |
+| Tests | 540 passing |
 | Providers implemented | LibreCrawl (full), PageSpeed Insights (live-validated 2026-08-09) |
 | Providers NOT started | GSC, Semrush, GA4, Server Logs, WordPress Privileged |
 
