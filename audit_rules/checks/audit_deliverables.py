@@ -77,11 +77,8 @@ def generate_task_csv(
 
     Returns:
         CSV string with header row and one row per finding, sorted by priority.
-        Returns empty string if no findings.
+        Emits a header-only artifact if no findings exist.
     """
-    if not findings:
-        return ""
-
     # Build registry lookup
     rule_map: dict[str, RuleDefinition] = {r.rule_id: r for r in registry}
 

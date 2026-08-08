@@ -63,6 +63,16 @@ def test_task_csv_neutralizes_spreadsheet_formulas():
     assert row["finding"].startswith("'=")
 
 
+def test_task_csv_emits_header_even_when_audit_has_no_findings():
+    from audit_rules.checks.audit_deliverables import (
+        TASK_CSV_COLUMNS, generate_task_csv,
+    )
+    from audit_rules.registry import load_registry
+
+    output = generate_task_csv([], load_registry())
+    assert output.strip().split(",") == TASK_CSV_COLUMNS
+
+
 def test_deliverable_adapter_requires_pipeline_marker():
     from audit_rules.adapters import DataUnavailableError
     from audit_rules.checks.audit_deliverables import check_audit_deliverables
