@@ -281,6 +281,15 @@ Live validation remains pending property-authorized OAuth credentials.
 
 ## Workstream 8: WordPress Privileged Provider
 
+**Status (2026-08-09): IMPLEMENTED OFFLINE; REAL ADMIN SNAPSHOT VALIDATION PENDING.**
+
+Implemented as a local read-only `wordpress-audit-v1` JSON snapshot rather than
+storing WordPress, SSH, or database credentials in the audit service. The
+provider rejects secrets, identities, raw option values, stale evidence, and
+host mismatches. Rules 36, 64, 65, 68, and 69 now have adapters and retain
+explicit partial/manual boundaries. See
+`docs/audit/WORDPRESS_PRIVILEGED_PROVIDER_VALIDATION.md`.
+
 **Priority:** P2 — unblocks 5 rules
 **Depends on:** WordPress admin credentials, security review
 **⚠️ HIGH SECURITY SENSITIVITY**
@@ -319,9 +328,10 @@ Live validation remains pending property-authorized OAuth credentials.
 **Priority:** P1 — unblocks 13 rules
 **Depends on:** Nothing (can run in parallel with providers)
 
-### 9.1 Rules Requiring Manual Review (13)
+### 9.1 Rules Requiring Manual Review (8)
 
-Rules: 36, 46, 53, 55, 56, 57, 66, 72, 73, 75, 76, 77, 80
+Current `NEW_MANUAL` rules must be generated from the registry source of truth;
+five former manual WordPress rules migrated to privileged snapshot adapters.
 
 These are classified `NEW_MANUAL` because they require human judgment (design quality, content strategy, competitive analysis) or privileged access not available via API.
 
