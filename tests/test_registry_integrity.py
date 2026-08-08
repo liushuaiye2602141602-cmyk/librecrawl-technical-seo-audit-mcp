@@ -391,3 +391,226 @@ class TestCSVLoader:
         assert rule72[0].impl_status == ImplStatus.NEW_MANUAL, (
             f"Rule 72 should be NEW_MANUAL, got {rule72[0].impl_status}"
         )
+
+    # ============================================================
+    # Edge case tests (Task 2)
+    # ============================================================
+
+    def test_checklist_with_preamble_skips_title_rows(self):
+        """Checklist CSV with title/description header rows should skip them."""
+        from audit_rules.registry import _load_checklist_csv
+        csv_content = (
+            "My Custom Audit Checklist (80 items),,,,,,,,,,,,,\n"
+            "适用于 WordPress 为主的独立站,,,,,,,,,,,,,\n"
+            "\n"
+            "id,category,check,description,priority,detection_method,tools,"
+            "remediation,owner,status,acceptance_criteria,finding_type,seo_impact,notes\n"
+            "1,抓取与索引,Test Rule,Test Desc,Critical,访问 /robots.txt,"
+            "Browser,修正,SEO/Dev,Open,Accept,Error,Crawling,Note\n"
+        )
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8-sig") as f:
+            f.write(csv_content)
+            f.flush()
+            rows = _load_checklist_csv(f.name)
+        os.unlink(f.name)
+
+        assert len(rows) == 1
+        assert rows[0]["id"] == 1
+
+    def test_checklist_without_preamble_still_works(self):
+        """Checklist CSV without preamble rows should also work."""
+        from audit_rules.registry import _load_checklist_csv
+        csv_content = (
+            "id,category,check,description,priority,detection_method,tools,"
+            "remediation,owner,status,acceptance_criteria,finding_type,seo_impact,notes\n"
+            "1,抓取与索引,Test Rule,Test Desc,Critical,访问 /robots.txt,"
+            "Browser,修正,SEO/Dev,Open,Accept,Error,Crawling,Note\n"
+        )
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write(csv_content)
+            f.flush()
+            rows = _load_checklist_csv(f.name)
+        os.unlink(f.name)
+
+        assert len(rows) == 1
+        assert rows[0]["id"] == 1
+
+    def test_checklist_no_data_rows_raises_error(self):
+        """Checklist with header but no data rows → ValueError."""
+        from audit_rules.registry import _load_checklist_csv
+        csv_content = (
+            "id,category,check,description,priority,detection_method,tools,"
+            "remediation,owner,status,acceptance_criteria,finding_type,seo_impact,notes\n"
+        )
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write(csv_content)
+            f.flush()
+            with pytest.raises(ValueError, match="No valid data rows"):
+                _load_checklist_csv(f.name)
+        os.unlink(f.name)
+
+    def test_checklist_no_header_raises_error(self):
+        """Checklist with no 'id,' header line → ValueError."""
+        from audit_rules.registry import _load_checklist_csv
+        csv_content = "Not a valid header line\n1,test,check\n"
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write(csv_content)
+            f.flush()
+            with pytest.raises(ValueError, match="No header row"):
+                _load_checklist_csv(f.name)
+        os.unlink(f.name)
+
+    def test_gapped_ids_raises_error(self):
+        """Non-consecutive audit IDs → ValueError."""
+        from audit_rules.registry import load_registry
+        gapped_checklist = (
+            "id,category,check,description,priority,detection_method,tools,"
+            "remediation,owner,status,acceptance_criteria,finding_type,seo_impact,notes\n"
+            "1,抓取与索引,Rule 1,Desc,Critical,检查,Browser,修正,SEO,Open,OK,Error,SEO,Note\n"
+            "3,抓取与索引,Rule 3,Desc,Critical,检查,Browser,修正,SEO,Open,OK,Error,SEO,Note\n"
+        )
+        gapped_mapping = (
+            "id,category,check,priority,impl_status,current_check_name,current_module,"
+            "gap_description,new_module,target_severity,data_source,external_dependency,"
+            "detection_method,effort_level,cannot_auto_reason\n"
+            "1,抓取与索引,Rule 1,Critical,EXISTING_FULL,check1,server.py,,,Error,LibreCrawl,None,STATIC_ANALYSIS,None,\n"
+            "3,抓取与索引,Rule 3,Critical,EXISTING_FULL,check3,server.py,,,Error,LibreCrawl,None,STATIC_ANALYSIS,None,\n"
+        )
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write(gapped_checklist)
+            cf = f.name
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write(gapped_mapping)
+            mf = f.name
+        with pytest.raises(ValueError, match="Missing audit_ids"):
+            load_registry(cf, mf)
+        os.unlink(cf)
+        os.unlink(mf)
+
+    def test_invalid_category_raises_error(self):
+        """Invalid category value → clear ValueError."""
+        from audit_rules.registry import load_registry
+        bad_checklist = (
+            "id,category,check,description,priority,detection_method,tools,"
+            "remediation,owner,status,acceptance_criteria,finding_type,seo_impact,notes\n"
+            "1,不存在的分类,Rule 1,Desc,Critical,检查,Browser,修正,SEO,Open,OK,Error,SEO,Note\n"
+        )
+        bad_mapping = (
+            "id,category,check,priority,impl_status,current_check_name,current_module,"
+            "gap_description,new_module,target_severity,data_source,external_dependency,"
+            "detection_method,effort_level,cannot_auto_reason\n"
+            "1,不存在的分类,Rule 1,Critical,EXISTING_FULL,check1,server.py,,,Error,LibreCrawl,None,STATIC_ANALYSIS,None,\n"
+        )
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write(bad_checklist)
+            cf = f.name
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write(bad_mapping)
+            mf = f.name
+        with pytest.raises(ValueError, match="invalid category"):
+            load_registry(cf, mf)
+        os.unlink(cf)
+        os.unlink(mf)
+
+    def test_invalid_priority_raises_error(self):
+        """Invalid priority value → clear ValueError."""
+        from audit_rules.registry import load_registry
+        bad_checklist = (
+            "id,category,check,description,priority,detection_method,tools,"
+            "remediation,owner,status,acceptance_criteria,finding_type,seo_impact,notes\n"
+            "1,抓取与索引,Rule 1,Desc,SUPER_URGENT,检查,Browser,修正,SEO,Open,OK,Error,SEO,Note\n"
+        )
+        bad_mapping = (
+            "id,category,check,priority,impl_status,current_check_name,current_module,"
+            "gap_description,new_module,target_severity,data_source,external_dependency,"
+            "detection_method,effort_level,cannot_auto_reason\n"
+            "1,抓取与索引,Rule 1,SUPER_URGENT,EXISTING_FULL,check1,server.py,,,Error,LibreCrawl,None,STATIC_ANALYSIS,None,\n"
+        )
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write(bad_checklist)
+            cf = f.name
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write(bad_mapping)
+            mf = f.name
+        with pytest.raises(ValueError, match="invalid priority"):
+            load_registry(cf, mf)
+        os.unlink(cf)
+        os.unlink(mf)
+
+    def test_invalid_impl_status_raises_error(self):
+        """Invalid impl_status value → clear ValueError."""
+        from audit_rules.registry import load_registry
+        good_checklist = (
+            "id,category,check,description,priority,detection_method,tools,"
+            "remediation,owner,status,acceptance_criteria,finding_type,seo_impact,notes\n"
+            "1,抓取与索引,Rule 1,Desc,Critical,检查,Browser,修正,SEO,Open,OK,Error,SEO,Note\n"
+        )
+        bad_mapping = (
+            "id,category,check,priority,impl_status,current_check_name,current_module,"
+            "gap_description,new_module,target_severity,data_source,external_dependency,"
+            "detection_method,effort_level,cannot_auto_reason\n"
+            "1,抓取与索引,Rule 1,Critical,UNKNOWN_STATUS,check1,server.py,,,Error,LibreCrawl,None,STATIC_ANALYSIS,None,\n"
+        )
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write(good_checklist)
+            cf = f.name
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write(bad_mapping)
+            mf = f.name
+        with pytest.raises(ValueError, match="invalid impl_status"):
+            load_registry(cf, mf)
+        os.unlink(cf)
+        os.unlink(mf)
+
+    def test_utf8_bom_checklist_parses_correctly(self):
+        """Checklist with UTF-8 BOM should parse the same as without."""
+        from audit_rules.registry import _load_checklist_csv
+        csv_content = (
+            "id,category,check,description,priority,detection_method,tools,"
+            "remediation,owner,status,acceptance_criteria,finding_type,seo_impact,notes\n"
+            "1,抓取与索引,Rule 1,Desc,Critical,检查,Browser,修正,SEO,Open,OK,Error,SEO,Note\n"
+        )
+        # Write with BOM
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8-sig") as f:
+            f.write(csv_content)
+            bom_path = f.name
+        # Write without BOM
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write(csv_content)
+            no_bom_path = f.name
+
+        rows_bom = _load_checklist_csv(bom_path)
+        rows_no_bom = _load_checklist_csv(no_bom_path)
+        os.unlink(bom_path)
+        os.unlink(no_bom_path)
+
+        assert len(rows_bom) == len(rows_no_bom) == 1
+        assert rows_bom[0]["id"] == rows_no_bom[0]["id"]
+
+    def test_compound_detection_method_maps_to_composite(self):
+        """'SITE_CHECK + EXTERNAL_API' should parse as DetectionMethod.COMPOSITE."""
+        from audit_rules.registry import _parse_detection_method
+        from audit_rules.categories import DetectionMethod
+        result = _parse_detection_method("SITE_CHECK + EXTERNAL_API")
+        assert result == DetectionMethod.COMPOSITE
+        result2 = _parse_detection_method("STATIC_ANALYSIS + EXTERNAL_API")
+        assert result2 == DetectionMethod.COMPOSITE
+
+    def test_empty_mapping_raises_missing_error(self, valid_checklist_csv):
+        """Mapping with no matching IDs → error about missing mappings."""
+        from audit_rules.registry import load_registry
+        empty_mapping = (
+            "id,category,check,priority,impl_status,current_check_name,current_module,"
+            "gap_description,new_module,target_severity,data_source,external_dependency,"
+            "detection_method,effort_level,cannot_auto_reason\n"
+        )
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write(valid_checklist_csv)
+            cf = f.name
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write(empty_mapping)
+            mf = f.name
+        with pytest.raises(ValueError, match="No valid data rows"):
+            load_registry(cf, mf)
+        os.unlink(cf)
+        os.unlink(mf)
