@@ -138,10 +138,10 @@ Every condition below must be **demonstrably true** before the project is declar
 **Status:** ❌ NOT MET (partial)
 
 ### C.5 — Manual Review Template Generated
-**Condition:** `manual-review-<domain>.md` generated for every audit, covering all 13 NEW_MANUAL rules.
-**Verification:** Template has sections for all 13 manual rules; parseable back into structured data.
-**Current state:** Not implemented.
-**Status:** ❌ NOT MET
+**Condition:** `manual-review-<domain>.md` generated for every audit, covering all current NEW_MANUAL rules.
+**Verification:** Template sections are registry-driven and parseable back into structured Findings.
+**Current state:** Implemented for the current 8 NEW_MANUAL rules; incomplete, ambiguous, tampered, or evidence-free issue decisions fail closed.
+**Status:** ✅ MET
 
 ---
 

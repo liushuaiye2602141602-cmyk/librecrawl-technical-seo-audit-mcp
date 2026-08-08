@@ -1,9 +1,9 @@
 # Codex Handoff — Master SEO Audit System
 
 **Handoff Date:** 2026-08-09
-**Git Commit:** `f7550a2` — `feat: evaluate WordPress privileged audit rules`
+**Git Commit:** `44edd78` — `feat: add registry-driven manual review workflow`
 **Branch:** `feat/master-audit-completion`
-**Tests:** 633 passed, 0 failed
+**Tests:** 640 passed, 0 failed
 **Handoff Type:** COMPLETE PROJECT HANDOFF — build the ENTIRE remaining system
 
 ---
@@ -25,7 +25,7 @@ A **Master Technical SEO Audit System** that evaluates 80 SEO rules against craw
 | Total rules | 80 (IDs 1..80) |
 | Rules with working adapters | 69 |
 | EXISTING_PARTIAL rules without adapters | 0 |
-| Tests | 633 passing |
+| Tests | 640 passing |
 | Providers implemented | LibreCrawl, PageSpeed (live), GSC/Semrush/GA4 (offline), Server Logs and WordPress Privileged (formats/contracts validated) |
 | Providers NOT started | None in the planned provider workstreams |
 
@@ -54,6 +54,7 @@ A **Master Technical SEO Audit System** that evaluates 80 SEO rules against craw
 | Phase 7 | 34,35 | 2 | GA4 Admin/Data API rules |
 | Phase 8 | 33 (+ Rule 5 enrichment) | 1 | Streaming server access-log analysis |
 | Phase 9 | 36,64,65,68,69 | 5 | Read-only WordPress administrator snapshot rules |
+| Phase 10 | Current 8 `NEW_MANUAL` rules | 8 | Registry-driven Markdown review artifact and fail-closed parser |
 
 ---
 

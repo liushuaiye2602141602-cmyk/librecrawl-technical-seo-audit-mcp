@@ -1,12 +1,12 @@
 {
   "generated_at": "2026-08-09T05:12:54+08:00",
   "git_branch": "feat/master-audit-completion",
-  "git_head": "f7550a2",
-  "git_commit_short": "f7550a2",
+  "git_head": "44edd78",
+  "git_commit_short": "44edd78",
   "python": "3.14.5",
   "tests": {
-    "collected": 633,
-    "passed": 633,
+    "collected": 640,
+    "passed": 640,
     "failed": 0,
     "skipped": 0
   },
@@ -87,7 +87,12 @@
     "coverage": {"status": "IMPLEMENTED", "file": "coverage.csv"},
     "tasks": {"status": "IMPLEMENTED", "file": "master-audit-tasks.csv"},
     "performance": {"status": "IMPLEMENTED", "file": "performance.csv"},
-    "manual_review": {"status": "NOT_STARTED"},
+    "manual_review": {
+      "status": "IMPLEMENTED",
+      "file": "<domain>-<timestamp>.manual-review.md",
+      "registry_driven_rule_count": 8,
+      "parser": "audit_rules.manual_review.parse_manual_review"
+    },
     "snapshot_diff": {
       "status": "IMPLEMENTED",
       "snapshot_file": "*.audit-snapshot-v1.json.gz",

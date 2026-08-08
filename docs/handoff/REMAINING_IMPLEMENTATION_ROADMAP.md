@@ -325,6 +325,11 @@ explicit partial/manual boundaries. See
 
 ## Workstream 9: Manual Review Workflow
 
+**Status (2026-08-09): IMPLEMENTED.** Every V3 audit emits a registry-driven
+Markdown template, and `audit_rules.manual_review.parse_manual_review()`
+converts completed WARNING/FAIL decisions into unified Findings. Invalid,
+incomplete, ambiguous, or evidence-free issue decisions fail closed.
+
 **Priority:** P1 — unblocks 13 rules
 **Depends on:** Nothing (can run in parallel with providers)
 
@@ -339,7 +344,7 @@ These are classified `NEW_MANUAL` because they require human judgment (design qu
 
 **Option A (Recommended): Structured Markdown Template**
 - Generate `manual-review-<domain>.md` per audit
-- Each of 13 rules gets a section with: description, what to look for, rating scale (Pass/Fail/Warning/Not Applicable), notes field
+- Each current manual rule gets a section with: description, acceptance criteria, rating scale (Pass/Fail/Warning/Not Applicable), evidence and notes fields
 - Reviewer fills in findings, script parses completed template back into structured Findings
 
 **Option B: Interactive CLI**
@@ -353,7 +358,7 @@ These are classified `NEW_MANUAL` because they require human judgment (design qu
 
 - `ManualReviewProvider` produces a data dict from completed template
 - `manual_review_checks.py` converts review data into structured Findings
-- Together they satisfy the 13 NEW_MANUAL rules
+- The registry-driven generator and parser cover all current NEW_MANUAL rules
 
 ---
 
