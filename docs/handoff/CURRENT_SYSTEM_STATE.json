@@ -1,12 +1,12 @@
 {
   "generated_at": "2026-08-09T05:12:54+08:00",
   "git_branch": "feat/master-audit-completion",
-  "git_head": "4d2fff2",
-  "git_commit_short": "4d2fff2",
+  "git_head": "9491701",
+  "git_commit_short": "9491701",
   "python": "3.14.5",
   "tests": {
-    "collected": 566,
-    "passed": 566,
+    "collected": 587,
+    "passed": 587,
     "failed": 0,
     "skipped": 0
   },
@@ -17,12 +17,12 @@
     "missing": 0,
     "classifications": {
       "EXISTING_FULL": 18,
-      "EXISTING_PARTIAL": 37,
-      "NEW_EXTERNAL_DATA": 12,
+      "EXISTING_PARTIAL": 39,
+      "NEW_EXTERNAL_DATA": 10,
       "NEW_MANUAL": 13,
       "NEW_AUTO": 0
     },
-    "adapter_count": 59,
+    "adapter_count": 61,
     "partial_rules_without_adapters": 0,
     "phase4a_completed_rules": [18, 32, 39, 43, 47, 51, 60, 67],
     "phase4b_completed_rules": [74],
@@ -51,7 +51,14 @@
       "client_module": "audit_rules/providers/gsc_client.py",
       "rules": [44, 52, 75, 76]
     },
-    "semrush": {"status": "NOT_STARTED", "module": null},
+    "semrush": {
+      "status": "IMPLEMENTED",
+      "live_validated": false,
+      "note": "OFFLINE_CONTRACT_VALIDATED; LIVE_VALIDATION_PENDING_PAID_V4_KEY",
+      "module": "audit_rules/providers/semrush_provider.py",
+      "client_module": "audit_rules/providers/semrush_client.py",
+      "rules": [31, 77]
+    },
     "ga4": {"status": "NOT_STARTED", "module": null},
     "server_logs": {"status": "NOT_STARTED", "module": null},
     "wordpress_privileged": {"status": "NOT_STARTED", "module": null}
@@ -85,6 +92,10 @@
     "GSC_SITE_URL": {"default": "", "desc": "Exact Search Console property"},
     "GSC_INSPECTION_LIMIT": {"default": "20", "desc": "Bounded URL Inspection sample"},
     "GSC_ANALYTICS_MAX_ROWS": {"default": "50000", "desc": "Rows per 28-day window"},
+    "MASTER_AUDIT_SEMRUSH_ENABLED": {"default": "true", "desc": "Enable Semrush provider within V3"},
+    "SEMRUSH_API_KEY": {"default": "", "desc": "Semrush Backlinks API v4 key"},
+    "SEMRUSH_TARGET": {"default": "audit hostname", "desc": "Optional root-domain target"},
+    "SEMRUSH_LOST_LINK_LIMIT": {"default": "100", "desc": "Bounded paid lost-link rows"},
     "PAGESPEED_API_KEY": {"default": "", "desc": "Google PSI API key"},
     "PSI_SAMPLE_LIMIT": {"default": "20", "desc": "Max URLs for PSI per session"},
     "PSI_STRATEGIES": {
@@ -108,5 +119,8 @@
     "SERVER_LOG_PATH": false,
     "WP_ADMIN_CREDENTIALS": false
   },
-  "live_validations_pending": ["GSC_OAUTH_PROPERTY_VALIDATION"]
+  "live_validations_pending": [
+    "GSC_OAUTH_PROPERTY_VALIDATION",
+    "SEMRUSH_V4_PAID_KEY_VALIDATION"
+  ]
 }

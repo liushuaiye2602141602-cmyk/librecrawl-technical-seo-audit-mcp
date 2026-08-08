@@ -197,6 +197,10 @@ public API does not expose Manual Actions/Security Issues.
 
 ## Workstream 5: Semrush Provider Implementation
 
+**Status (2026-08-09):** Offline implementation complete using the current
+Backlinks API v4 contract. Rules 31 and 77 are executable; live validation is
+pending a paid v4 API key.
+
 **Priority:** P0 — unblocks 4 rules
 **Depends on:** Semrush API key (paid subscription)
 

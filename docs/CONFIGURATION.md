@@ -20,6 +20,10 @@ Everything is configured through environment variables. All are optional — the
 | `GSC_SITE_URL` | unset | Exact Search Console property: a URL-prefix property including its trailing slash, or `sc-domain:example.com`. |
 | `GSC_INSPECTION_LIMIT` | `20` | Deterministic per-audit URL Inspection sample; bounded to 100. |
 | `GSC_ANALYTICS_MAX_ROWS` | `50000` | Maximum Search Analytics rows per 28-day window; each API page is bounded to 25,000. |
+| `MASTER_AUDIT_SEMRUSH_ENABLED` | `true` | Enables the Semrush provider when V3 and a v4 key are present. |
+| `SEMRUSH_API_KEY` | unset | Semrush API v4 key used only in the `Authorization` header. |
+| `SEMRUSH_TARGET` | audit hostname | Optional explicit root-domain target. |
+| `SEMRUSH_LOST_LINK_LIMIT` | `100` | Lost-link result limit, bounded to 500 to control paid API units. |
 
 ## Transports
 

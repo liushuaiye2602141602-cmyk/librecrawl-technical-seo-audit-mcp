@@ -41,6 +41,10 @@ services:
       - GSC_SITE_URL=${GSC_SITE_URL:-}
       - GSC_INSPECTION_LIMIT=${GSC_INSPECTION_LIMIT:-20}
       - GSC_ANALYTICS_MAX_ROWS=${GSC_ANALYTICS_MAX_ROWS:-50000}
+      - MASTER_AUDIT_SEMRUSH_ENABLED=${MASTER_AUDIT_SEMRUSH_ENABLED:-true}
+      - SEMRUSH_API_KEY=${SEMRUSH_API_KEY:-}
+      - SEMRUSH_TARGET=${SEMRUSH_TARGET:-}
+      - SEMRUSH_LOST_LINK_LIMIT=${SEMRUSH_LOST_LINK_LIMIT:-100}
     volumes:
       - ./reports:/reports
       - librecrawl-data:/librecrawl-data:ro
