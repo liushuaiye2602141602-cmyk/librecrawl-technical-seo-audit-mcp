@@ -127,3 +127,23 @@ def test_runner_omits_performance_artifact_without_current_psi_rows(tmp_path, mo
         tmp_path, AuditRunner())
     assert set(paths) == {"audit_score_json"}
     assert [kind for kind, _ in registered] == ["audit_score_json"]
+
+
+def test_required_v3_artifact_failure_is_explicitly_marked_partial(monkeypatch):
+    import runner
+
+    events = []
+    monkeypatch.setattr(
+        runner.state, "log_event",
+        lambda sid, kind, detail=None: events.append((sid, kind, detail)))
+
+    runner._record_v3_artifact_failure(
+        "session-1", "manual_review_md", OSError("sensitive path"))
+
+    assert events == [
+        ("session-1", "v3_artifact_failed", {
+            "artifact": "manual_review_md", "error_type": "OSError"}),
+        ("session-1", "v3_artifacts_partial", {
+            "failed_artifact": "manual_review_md"}),
+    ]
+    assert "sensitive" not in str(events)

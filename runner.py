@@ -51,6 +51,18 @@ _wake = threading.Event()
 _shutdown = threading.Event()
 
 
+def _record_v3_artifact_failure(sid: str, artifact: str,
+                                exc: Exception) -> None:
+    """Expose an additive V3 artifact failure without leaking exception text."""
+    state.log_event(sid, "v3_artifact_failed", {
+        "artifact": artifact,
+        "error_type": type(exc).__name__,
+    })
+    state.log_event(sid, "v3_artifacts_partial", {
+        "failed_artifact": artifact,
+    })
+
+
 def _write_manual_review_artifact(
     sid: str,
     base_url: str,
@@ -628,8 +640,8 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
                     state.log_event(sid, "v3_manual_review_generated", {
                         "path": str(manual_path),
                     })
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _record_v3_artifact_failure(sid, "manual_review_md", exc)
 
                 try:
                     from audit_rules.integration import _get_runner
@@ -639,8 +651,8 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
                     state.log_event(sid, "v3_summary_artifacts_generated", {
                         "artifacts": sorted(summary_paths),
                     })
-                except Exception:
-                    pass
+                except Exception as exc:
+                    _record_v3_artifact_failure(sid, "summary_artifacts", exc)
 
                 # Generate master-audit-tasks.csv from all findings (Rule 40)
                 try:
@@ -662,9 +674,9 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
                         state.log_event(sid, "v3_task_csv_generated", {
                             "rows": task_csv.count("\n") - 1,
                         })
-                except Exception:
+                except Exception as exc:
                     # Task CSV is additive — failure must not impact audit
-                    pass
+                    _record_v3_artifact_failure(sid, "task_csv", exc)
     except Exception as e:
         # V3 shadow pipeline is strictly additive — a failure here MUST NOT
         # impact the existing audit artifacts (MD, PDF, CSVs, zip).
