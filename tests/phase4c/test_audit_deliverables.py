@@ -48,6 +48,26 @@ def test_task_csv_uses_real_finding_fields_and_action_columns():
     assert row["due_date"] == ""
     assert row["status"] == "open"
     assert row["verification_status"] == "pending"
+    assert row["severity"] == "Error"
+    assert row["detected_value"] == "Wrong canonical"
+    assert row["expected_value"] == "Self canonical"
+    assert row["affected_url_count"] == "1"
+
+
+def test_task_csv_aggregates_equivalent_findings_without_losing_url_sample():
+    from audit_rules.checks.audit_deliverables import generate_task_csv
+    from audit_rules.registry import load_registry
+
+    first = _finding()
+    second = _finding()
+    second.url = "https://example.com/other"
+    rows = list(csv.DictReader(io.StringIO(
+        generate_task_csv([first, second], load_registry()))))
+
+    assert len(rows) == 1
+    assert rows[0]["affected_url_count"] == "2"
+    assert "https://example.com/page" in rows[0]["affected_urls_sample"]
+    assert "https://example.com/other" in rows[0]["affected_urls_sample"]
 
 
 def test_task_csv_neutralizes_spreadsheet_formulas():

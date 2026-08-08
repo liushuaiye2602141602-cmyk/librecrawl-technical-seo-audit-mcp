@@ -80,6 +80,24 @@ def test_score_is_unknown_when_nothing_executed_and_has_category_breakdown():
     assert score.category_scores["Security"] < score.category_scores["Content"]
 
 
+def test_score_contract_explains_contributions_exclusions_and_confidence():
+    from audit_rules.scoring import compute_audit_score
+
+    rows = [
+        _coverage(1),
+        _coverage(2, execution=ExecutionStatus.NOT_CHECKED),
+        _coverage(3, execution=ExecutionStatus.NOT_APPLICABLE),
+    ]
+    data = compute_audit_score([_finding(1, confidence=0.75)], rows).to_dict()
+
+    assert data["scoring_version"] == "1.0"
+    assert data["confidence"] == {"pct": 75.0, "label": "Medium"}
+    assert data["excluded_rules"] == [3]
+    assert data["not_checked_rules"] == [2]
+    assert data["rule_contributions"][0]["audit_id"] == 1
+    assert data["rule_contributions"][0]["penalty"] > 0
+
+
 def test_runner_writes_score_and_performance_artifacts(tmp_path, monkeypatch):
     import runner
     from tests.fixtures.psi import make_good_mobile, make_psi_cache

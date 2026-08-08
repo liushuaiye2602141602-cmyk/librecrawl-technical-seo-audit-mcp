@@ -32,15 +32,22 @@ TASK_CSV_COLUMNS = [
     "rule_id",
     "category",
     "priority",
+    "severity",
+    "finding_type",
     "url",
     "finding",
     "evidence",
+    "detected_value",
+    "expected_value",
     "seo_impact",
     "remediation",
     "owner",
     "assignee",
     "due_date",
     "acceptance_criteria",
+    "confidence",
+    "affected_url_count",
+    "affected_urls_sample",
     "status",
     "verification_status",
 ]
@@ -59,6 +66,18 @@ def _sort_key(finding: Finding) -> tuple:
     """Sort findings: priority first, then by rule audit_id, then by URL."""
     priority_order = PRIORITY_ORDER.get(finding.priority, 99)
     return (priority_order, finding.audit_id, finding.url or "")
+
+
+def _group_key(finding: Finding) -> tuple:
+    """Group the same actionable defect across URLs without hiding its shape."""
+    return (
+        finding.audit_id, finding.rule_id, finding.category, finding.priority,
+        finding.severity, finding.finding_type,
+        finding.finding_detail or finding.detected_value,
+        finding.detected_value, finding.expected_value,
+        finding.remediation, finding.owner, finding.acceptance_criteria,
+        float(finding.confidence),
+    )
 
 
 def generate_task_csv(
@@ -82,8 +101,9 @@ def generate_task_csv(
     # Build registry lookup
     rule_map: dict[str, RuleDefinition] = {r.rule_id: r for r in registry}
 
-    # Sort findings by priority then audit_id then url
-    sorted_findings = sorted(findings, key=_sort_key)
+    groups: dict[tuple, list[Finding]] = {}
+    for finding in sorted(findings, key=_sort_key):
+        groups.setdefault(_group_key(finding), []).append(finding)
 
     output = io.StringIO()
     writer = csv.writer(output, lineterminator="\n")
@@ -91,26 +111,36 @@ def generate_task_csv(
     # Header
     writer.writerow(TASK_CSV_COLUMNS)
 
-    for f in sorted_findings:
+    for group in sorted(groups.values(), key=lambda items: _sort_key(items[0])):
+        f = group[0]
         rule = rule_map.get(f.rule_id)
         remediation = rule.remediation if rule else ""
         owner = rule.owner if rule else ""
         acceptance = rule.acceptance_criteria if rule else ""
+        urls = list(dict.fromkeys(item.url for item in group if item.url))
+        evidence = list(dict.fromkeys(item.evidence for item in group if item.evidence))
 
         writer.writerow([_safe_cell(value) for value in [
             f.audit_id,
             f.rule_id,
             f.category or "",
             f.priority or "",
-            f.url or "",
+            f.severity or "",
+            f.finding_type or "",
+            urls[0] if urls else "",
             f.finding_detail or f.detected_value or "",
-            f.evidence or "",
+            " | ".join(evidence[:20]),
+            f.detected_value or "",
+            f.expected_value or "",
             "",  # seo_impact — filled manually or by future enhancement
             f.remediation or remediation,
             f.owner or owner,
             f.owner or owner,
             "",  # due_date — intentionally assigned by the project owner
             acceptance,
+            f.confidence,
+            len(urls) if urls else len(group),
+            " | ".join(urls[:20]),
             "open",  # default status
             "pending",
         ]])

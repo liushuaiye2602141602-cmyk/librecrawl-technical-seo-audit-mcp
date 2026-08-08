@@ -22,6 +22,9 @@ class AuditScore:
     executed_rules: int
     eligible_rules: int
     category_scores: dict[str, Optional[float]]
+    rule_contributions: list[dict]
+    excluded_rules: list[int]
+    not_checked_rules: list[int]
 
     def to_dict(self) -> dict:
         return {
@@ -29,9 +32,15 @@ class AuditScore:
             "overall_score": self.overall_score,
             "coverage_pct": self.coverage_pct,
             "finding_confidence_pct": self.finding_confidence_pct,
+            "confidence": {"pct": self.finding_confidence_pct,
+                           "label": _confidence_label(self.finding_confidence_pct)},
             "executed_rules": self.executed_rules,
             "eligible_rules": self.eligible_rules,
             "category_scores": dict(sorted(self.category_scores.items())),
+            "rule_contributions": self.rule_contributions,
+            "excluded_rules": self.excluded_rules,
+            "not_checked_rules": self.not_checked_rules,
+            "scoring_version": "1.0",
             "method": {
                 "priority_weights": _PRIORITY,
                 "severity_factors": _SEVERITY,
@@ -39,6 +48,16 @@ class AuditScore:
                 "note": "Quality excludes unexecuted rules; coverage is reported separately",
             },
         }
+
+
+def _confidence_label(value: Optional[float]) -> str:
+    if value is None:
+        return "Unknown"
+    if value >= 80:
+        return "High"
+    if value >= 50:
+        return "Medium"
+    return "Low"
 
 
 def _value(value) -> str:
@@ -84,10 +103,25 @@ def compute_audit_score(findings: list[Finding],
         round(100.0 * confidence_total / confidence_weight, 2)
         if confidence_weight else None
     )
+    contributions = []
+    for row in sorted(executed, key=lambda item: item.audit_id):
+        weight = _PRIORITY.get(_value(row.priority), 1.0)
+        penalty = min(weight, penalties.get(row.audit_id, 0.0))
+        contributions.append({
+            "audit_id": row.audit_id, "rule_id": row.rule_id,
+            "category": row.category, "weight": weight,
+            "penalty": round(penalty, 4),
+            "rule_score": round(100.0 * (1.0 - penalty / weight), 2),
+        })
     return AuditScore(
         overall_score=_quality(executed, penalties),
         coverage_pct=coverage_pct,
         finding_confidence_pct=finding_confidence,
         executed_rules=len(executed), eligible_rules=len(eligible),
         category_scores=category_scores,
+        rule_contributions=contributions,
+        excluded_rules=sorted(row.audit_id for row in coverage_rows
+                              if _value(row.execution_status) == ExecutionStatus.NOT_APPLICABLE.value),
+        not_checked_rules=sorted(row.audit_id for row in coverage_rows
+                                 if _value(row.execution_status) == ExecutionStatus.NOT_CHECKED.value),
     )
