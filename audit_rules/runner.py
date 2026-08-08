@@ -77,6 +77,12 @@ class RuleRunner:
         librecrawl = LibreCrawlDataProvider(pages, site_data, links)
         site_ctx, page_contexts = librecrawl.create_contexts(base_url, completeness)
 
+        # The integration layer caches RuleRunner across audits. PSI cache is
+        # audit-scoped evidence and must not leak URLs or results between sites.
+        psi_provider = self.providers.get("PageSpeed API")
+        if psi_provider is not None:
+            psi_provider.clear_cache()
+
         # Step 2: Enrich with registered providers (Phase 3+ — no-op in Phase 1)
         available_providers = {"LibreCrawl"}
         if existing_data.get("snapshot_baseline_available") is True:
@@ -110,7 +116,6 @@ class RuleRunner:
                     available_providers.difference_update(provider_aliases)
 
         # Step 3: Populate PSI cache if PageSpeedDataProvider is available
-        psi_provider = self.providers.get("PageSpeed API")
         if psi_provider is not None and psi_provider.is_available():
             strategies = psi_provider._strategies
             sampled = select_performance_sample(

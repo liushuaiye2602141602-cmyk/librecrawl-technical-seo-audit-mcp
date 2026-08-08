@@ -284,6 +284,32 @@ class TestPSICallCountPerAudit:
         )
 
 
+def test_rule_runner_clears_psi_cache_between_audits():
+    """A cached runner must never leak one site's PSI rows into the next audit."""
+    from audit_rules.providers.pagespeed_provider import PageSpeedDataProvider
+    from audit_rules.registry import load_registry
+    from audit_rules.runner import RuleRunner
+
+    provider = PageSpeedDataProvider(
+        api_key="test-key", sample_limit=1, strategies=["mobile"])
+    provider._available = True
+    provider._fetch_snapshot = MagicMock(
+        side_effect=lambda url, strategy: _make_mock_snapshot(url, strategy))
+    runner = RuleRunner(load_registry(), providers={provider.name: provider})
+
+    def page(url):
+        return {"url": url, "status_code": 200, "title": "Page",
+                "meta_description": "Description", "h1": "Page",
+                "canonical_url": url, "robots": "index, follow",
+                "word_count": 500, "depth": 0}
+
+    runner.run(pages=[page("https://one.example/")], base_url="https://one.example/")
+    assert set(provider._cache) == {("https://one.example", "mobile")}
+
+    runner.run(pages=[page("https://two.example/")], base_url="https://two.example/")
+    assert set(provider._cache) == {("https://two.example", "mobile")}
+
+
 class TestSingleCanonicalHTTPImplementation:
     """psi_client.fetch_pagespeed() is the ONLY PSI HTTP function."""
 

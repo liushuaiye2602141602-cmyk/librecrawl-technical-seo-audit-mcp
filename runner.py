@@ -23,6 +23,7 @@ pick polling back up; otherwise we issue resume_from_crawl_id and continue.
 import threading
 import time
 import os
+import json
 from pathlib import Path
 from datetime import datetime
 
@@ -68,6 +69,42 @@ def _write_manual_review_artifact(
     )
     state.add_artifact(sid, "manual_review_md", path)
     return path
+
+
+def _write_v3_summary_artifacts(
+    sid: str,
+    findings: list,
+    coverage_rows: list,
+    domain: str,
+    timestamp: str,
+    reports_dir: Path,
+    audit_runner,
+) -> dict[str, Path]:
+    """Persist deterministic score and current-audit PSI summary artifacts."""
+    from audit_rules.checks.performance_csv import generate_performance_csv
+    from audit_rules.scoring import compute_audit_score
+
+    output: dict[str, Path] = {}
+    score_path = Path(reports_dir) / f"{domain}-{timestamp}.audit-score.json"
+    score_path.write_text(
+        json.dumps(compute_audit_score(findings, coverage_rows).to_dict(),
+                   ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    state.add_artifact(sid, "audit_score_json", score_path)
+    output["audit_score_json"] = score_path
+
+    psi = audit_runner.providers.get("PageSpeed API")
+    cache = getattr(psi, "_cache", {}) if psi is not None else {}
+    if cache:
+        strategies = getattr(psi, "_strategies", ["mobile"])
+        performance_path = Path(reports_dir) / f"{domain}-{timestamp}.performance.csv"
+        performance_path.write_text(
+            generate_performance_csv(cache, strategies[0] if strategies else "mobile"),
+            encoding="utf-8-sig", newline="")
+        state.add_artifact(sid, "performance_csv", performance_path)
+        output["performance_csv"] = performance_path
+    return output
 
 
 def _prepare_snapshot_artifacts(
@@ -590,6 +627,17 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
                         sid, url, domain, timestamp, REPORTS_DIR)
                     state.log_event(sid, "v3_manual_review_generated", {
                         "path": str(manual_path),
+                    })
+                except Exception:
+                    pass
+
+                try:
+                    from audit_rules.integration import _get_runner
+                    summary_paths = _write_v3_summary_artifacts(
+                        sid, v3_findings, coverage_rows, domain, timestamp,
+                        REPORTS_DIR, _get_runner())
+                    state.log_event(sid, "v3_summary_artifacts_generated", {
+                        "artifacts": sorted(summary_paths),
                     })
                 except Exception:
                     pass
