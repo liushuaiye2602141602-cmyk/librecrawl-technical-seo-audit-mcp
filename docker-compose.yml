@@ -45,6 +45,9 @@ services:
       - SEMRUSH_API_KEY=${SEMRUSH_API_KEY:-}
       - SEMRUSH_TARGET=${SEMRUSH_TARGET:-}
       - SEMRUSH_LOST_LINK_LIMIT=${SEMRUSH_LOST_LINK_LIMIT:-100}
+      - MASTER_AUDIT_GA4_ENABLED=${MASTER_AUDIT_GA4_ENABLED:-true}
+      - GA4_ACCESS_TOKEN=${GA4_ACCESS_TOKEN:-}
+      - GA4_PROPERTY_ID=${GA4_PROPERTY_ID:-}
     volumes:
       - ./reports:/reports
       - librecrawl-data:/librecrawl-data:ro

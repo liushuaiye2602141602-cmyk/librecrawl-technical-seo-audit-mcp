@@ -24,6 +24,9 @@ Everything is configured through environment variables. All are optional — the
 | `SEMRUSH_API_KEY` | unset | Semrush API v4 key used only in the `Authorization` header. |
 | `SEMRUSH_TARGET` | audit hostname | Optional explicit root-domain target. |
 | `SEMRUSH_LOST_LINK_LIMIT` | `100` | Lost-link result limit, bounded to 500 to control paid API units. |
+| `MASTER_AUDIT_GA4_ENABLED` | `true` | Enables the GA4 provider when V3 and OAuth configuration are present. |
+| `GA4_ACCESS_TOKEN` | unset | Short-lived OAuth bearer token with `analytics.readonly` access. |
+| `GA4_PROPERTY_ID` | unset | Numeric GA4 property ID or `properties/{id}` resource name. |
 
 ## Transports
 

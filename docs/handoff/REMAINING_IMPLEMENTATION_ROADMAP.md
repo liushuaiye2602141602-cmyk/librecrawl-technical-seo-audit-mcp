@@ -252,6 +252,10 @@ pending a paid v4 API key.
 
 ## Workstream 7: GA4 Provider Implementation
 
+**Status (2026-08-09):** GA4 Admin/Data API implementation is complete
+offline and Rules 34/35 are executable with explicit manual GTM boundaries.
+Live validation remains pending property-authorized OAuth credentials.
+
 **Priority:** P2 — unblocks 1 rule directly, enriches others
 **Depends on:** GA4 Property ID + service account
 

@@ -1,16 +1,16 @@
 # Codex Handoff — Master SEO Audit System
 
 **Handoff Date:** 2026-08-09
-**Git Commit:** `9491701` — `feat: execute Semrush backlink rules`
+**Git Commit:** `f51c85e` — `feat: execute GA4 tracking rules`
 **Branch:** `feat/master-audit-completion`
-**Tests:** 587 passed, 0 failed
+**Tests:** 605 passed, 0 failed
 **Handoff Type:** COMPLETE PROJECT HANDOFF — build the ENTIRE remaining system
 
 ---
 
 ## 1. What This Project Is
 
-A **Master Technical SEO Audit System** that evaluates 80 SEO rules against crawled website data. It ingests LibreCrawl exports, runs 61 implemented check functions against page-level and site-level data, and produces structured findings (CSV reports, JSON artifacts).
+A **Master Technical SEO Audit System** that evaluates 80 SEO rules against crawled website data. It ingests LibreCrawl exports, runs 63 implemented check functions against page-level and site-level data, and produces structured findings (CSV reports, JSON artifacts).
 
 **Core architecture:** crawl once → normalize once → evaluate many rules (NOT N rules × N pages × HTTP refetch).
 
@@ -23,20 +23,20 @@ A **Master Technical SEO Audit System** that evaluates 80 SEO rules against craw
 | Metric | Value |
 |--------|-------|
 | Total rules | 80 (IDs 1..80) |
-| Rules with working adapters | 61 |
+| Rules with working adapters | 63 |
 | EXISTING_PARTIAL rules without adapters | 0 |
-| Tests | 587 passing |
-| Providers implemented | LibreCrawl, PageSpeed Insights (live), GSC and Semrush (offline contracts; live credentials pending) |
-| Providers NOT started | GA4, Server Logs, WordPress Privileged |
+| Tests | 605 passing |
+| Providers implemented | LibreCrawl, PageSpeed Insights (live), GSC/Semrush/GA4 (offline contracts; live credentials pending) |
+| Providers NOT started | Server Logs, WordPress Privileged |
 
 ### Classification Breakdown
 
 | Classification | Count | Meaning |
 |----------------|-------|---------|
 | EXISTING_FULL | 18 | Fully implemented, production-ready |
-| EXISTING_PARTIAL | 39 | Partially implemented, has adapter, gaps remain |
+| EXISTING_PARTIAL | 41 | Partially implemented, has adapter, gaps remain |
 | NEW_AUTO | 0 | Rule 74 completed in Phase 4B |
-| NEW_EXTERNAL_DATA | 10 | Needs external API/data provider first |
+| NEW_EXTERNAL_DATA | 8 | Needs external API/data provider first |
 | NEW_MANUAL | 13 | Requires manual review workflow |
 | **TOTAL** | **80** | |
 
@@ -51,6 +51,7 @@ A **Master Technical SEO Audit System** that evaluates 80 SEO rules against craw
 | Phase 4B | 74 | 1 | Portable snapshot/diff regression rule |
 | Phase 5 | 44,52,75,76 | 4 | GSC URL Inspection and Search Analytics rules |
 | Phase 6 | 31,77 | 2 | Semrush Backlinks API v4 rules |
+| Phase 7 | 34,35 | 2 | GA4 Admin/Data API rules |
 
 ---
 
