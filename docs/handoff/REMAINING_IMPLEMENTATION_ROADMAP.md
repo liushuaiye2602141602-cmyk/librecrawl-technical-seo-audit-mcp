@@ -364,6 +364,12 @@ These are classified `NEW_MANUAL` because they require human judgment (design qu
 
 ## Workstream 10: NEW_EXTERNAL_DATA Rule Implementation
 
+**Status (2026-08-09): IMPLEMENTED.** PSI-backed Rules 21, 24, 62, and 63
+were corrected to `EXISTING_PARTIAL`. Rules 46 and 48 consume a privacy-safe
+rendered-DOM summary, while Rule 80 consumes a vendor-neutral availability
+monitoring summary. `NEW_EXTERNAL_DATA` is now zero; real external inputs remain
+runtime validation dependencies, not missing code.
+
 **Priority:** P1 — implement check functions AFTER corresponding provider is done
 **Depends on:** Workstreams 4–8 (providers)
 

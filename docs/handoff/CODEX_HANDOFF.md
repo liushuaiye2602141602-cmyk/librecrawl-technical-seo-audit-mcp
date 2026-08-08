@@ -1,16 +1,16 @@
 # Codex Handoff — Master SEO Audit System
 
 **Handoff Date:** 2026-08-09
-**Git Commit:** `44edd78` — `feat: add registry-driven manual review workflow`
+**Git Commit:** `012f995` — `feat: evaluate remaining external evidence rules`
 **Branch:** `feat/master-audit-completion`
-**Tests:** 640 passed, 0 failed
+**Tests:** 655 passed, 0 failed
 **Handoff Type:** COMPLETE PROJECT HANDOFF — build the ENTIRE remaining system
 
 ---
 
 ## 1. What This Project Is
 
-A **Master Technical SEO Audit System** that evaluates 80 SEO rules against crawled website data. It ingests LibreCrawl exports, runs 69 implemented check functions against page-level and site-level data, and produces structured findings (CSV reports, JSON artifacts).
+A **Master Technical SEO Audit System** that evaluates 80 SEO rules against crawled website data. It ingests LibreCrawl exports, runs 72 implemented check functions against page-level and site-level data, and produces structured findings (CSV reports, JSON artifacts).
 
 **Core architecture:** crawl once → normalize once → evaluate many rules (NOT N rules × N pages × HTTP refetch).
 
@@ -23,10 +23,10 @@ A **Master Technical SEO Audit System** that evaluates 80 SEO rules against craw
 | Metric | Value |
 |--------|-------|
 | Total rules | 80 (IDs 1..80) |
-| Rules with working adapters | 69 |
+| Rules with working adapters | 72 |
 | EXISTING_PARTIAL rules without adapters | 0 |
-| Tests | 640 passing |
-| Providers implemented | LibreCrawl, PageSpeed (live), GSC/Semrush/GA4 (offline), Server Logs and WordPress Privileged (formats/contracts validated) |
+| Tests | 655 passing |
+| Providers implemented | LibreCrawl, PageSpeed (live), GSC/Semrush/GA4 (offline), Server Logs, WordPress Privileged, Rendered DOM and Availability snapshots (formats/contracts validated) |
 | Providers NOT started | None in the planned provider workstreams |
 
 ### Classification Breakdown
@@ -34,9 +34,9 @@ A **Master Technical SEO Audit System** that evaluates 80 SEO rules against craw
 | Classification | Count | Meaning |
 |----------------|-------|---------|
 | EXISTING_FULL | 18 | Fully implemented, production-ready |
-| EXISTING_PARTIAL | 47 | Partially implemented, has adapter, gaps remain |
+| EXISTING_PARTIAL | 54 | Partially implemented, has adapter, gaps remain |
 | NEW_AUTO | 0 | Rule 74 completed in Phase 4B |
-| NEW_EXTERNAL_DATA | 7 | Needs external API/data provider first |
+| NEW_EXTERNAL_DATA | 0 | All planned external evidence contracts implemented |
 | NEW_MANUAL | 8 | Requires manual review workflow |
 | **TOTAL** | **80** | |
 
@@ -55,6 +55,7 @@ A **Master Technical SEO Audit System** that evaluates 80 SEO rules against craw
 | Phase 8 | 33 (+ Rule 5 enrichment) | 1 | Streaming server access-log analysis |
 | Phase 9 | 36,64,65,68,69 | 5 | Read-only WordPress administrator snapshot rules |
 | Phase 10 | Current 8 `NEW_MANUAL` rules | 8 | Registry-driven Markdown review artifact and fail-closed parser |
+| Phase 11 | 46,48,80 (+ PSI classification 21,24,62,63) | 7 | Portable render/availability evidence and source-truth correction |
 
 ---
 

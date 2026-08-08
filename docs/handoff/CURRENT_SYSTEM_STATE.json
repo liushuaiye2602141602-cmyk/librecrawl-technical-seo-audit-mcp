@@ -1,12 +1,12 @@
 {
   "generated_at": "2026-08-09T05:12:54+08:00",
   "git_branch": "feat/master-audit-completion",
-  "git_head": "44edd78",
-  "git_commit_short": "44edd78",
+  "git_head": "012f995",
+  "git_commit_short": "012f995",
   "python": "3.14.5",
   "tests": {
-    "collected": 640,
-    "passed": 640,
+    "collected": 655,
+    "passed": 655,
     "failed": 0,
     "skipped": 0
   },
@@ -17,12 +17,12 @@
     "missing": 0,
     "classifications": {
       "EXISTING_FULL": 18,
-      "EXISTING_PARTIAL": 47,
-      "NEW_EXTERNAL_DATA": 7,
+      "EXISTING_PARTIAL": 54,
+      "NEW_EXTERNAL_DATA": 0,
       "NEW_MANUAL": 8,
       "NEW_AUTO": 0
     },
-    "adapter_count": 69,
+    "adapter_count": 72,
     "partial_rules_without_adapters": 0,
     "phase4a_completed_rules": [18, 32, 39, 43, 47, 51, 60, 67],
     "phase4b_completed_rules": [74],
@@ -80,6 +80,20 @@
       "note": "SCHEMA_PRIVACY_AND_RULES_VALIDATED; REAL_ADMIN_SNAPSHOT_PENDING",
       "module": "audit_rules/providers/wordpress_privileged_provider.py",
       "rules": [36, 64, 65, 68, 69]
+    },
+    "render_snapshot": {
+      "status": "IMPLEMENTED",
+      "input_validated": false,
+      "note": "SCHEMA_PRIVACY_AND_RULES_VALIDATED; REAL_BROWSER_SUMMARY_PENDING",
+      "module": "audit_rules/providers/render_snapshot_provider.py",
+      "rules": [46, 48]
+    },
+    "availability_snapshot": {
+      "status": "IMPLEMENTED",
+      "input_validated": false,
+      "note": "SCHEMA_PRIVACY_AND_RULE_VALIDATED; REAL_MONITORING_SUMMARY_PENDING",
+      "module": "audit_rules/providers/availability_snapshot_provider.py",
+      "rules": [80]
     }
   },
   "artifacts": {
@@ -129,6 +143,12 @@
     "MASTER_AUDIT_WORDPRESS_ENABLED": {"default": "false", "desc": "Enable local WordPress snapshot provider"},
     "WP_AUDIT_EXPORT_PATH": {"default": "", "desc": "Read-only wordpress-audit-v1 JSON path"},
     "WP_AUDIT_MAX_AGE_HOURS": {"default": "168", "desc": "Maximum accepted snapshot age"},
+    "MASTER_AUDIT_RENDER_ENABLED": {"default": "false", "desc": "Enable rendered summary provider"},
+    "JS_RENDER_AUDIT_PATH": {"default": "", "desc": "Read-only render-audit-v1 JSON path"},
+    "JS_RENDER_MAX_AGE_HOURS": {"default": "168", "desc": "Maximum rendered summary age"},
+    "MASTER_AUDIT_AVAILABILITY_ENABLED": {"default": "false", "desc": "Enable availability summary provider"},
+    "AVAILABILITY_AUDIT_PATH": {"default": "", "desc": "Read-only availability-monitor-v1 JSON path"},
+    "AVAILABILITY_MAX_AGE_HOURS": {"default": "24", "desc": "Maximum monitoring export age"},
     "PAGESPEED_API_KEY": {"default": "", "desc": "Google PSI API key"},
     "PSI_SAMPLE_LIMIT": {"default": "20", "desc": "Max URLs for PSI per session"},
     "PSI_STRATEGIES": {
@@ -150,13 +170,17 @@
     "SEMRUSH_API_KEY": false,
     "GA4_PROPERTY": false,
     "SERVER_LOG_PATH": false,
-    "WP_ADMIN_SNAPSHOT": false
+    "WP_ADMIN_SNAPSHOT": false,
+    "RENDER_BROWSER_SNAPSHOT": false,
+    "AVAILABILITY_MONITOR_SNAPSHOT": false
   },
   "live_validations_pending": [
     "GSC_OAUTH_PROPERTY_VALIDATION",
     "SEMRUSH_V4_PAID_KEY_VALIDATION",
     "GA4_OAUTH_PROPERTY_VALIDATION",
     "REAL_SERVER_LOG_INPUT_VALIDATION",
-    "REAL_WORDPRESS_ADMIN_SNAPSHOT_VALIDATION"
+    "REAL_WORDPRESS_ADMIN_SNAPSHOT_VALIDATION",
+    "REAL_RENDER_BROWSER_SNAPSHOT_VALIDATION",
+    "REAL_AVAILABILITY_MONITOR_SNAPSHOT_VALIDATION"
   ]
 }
