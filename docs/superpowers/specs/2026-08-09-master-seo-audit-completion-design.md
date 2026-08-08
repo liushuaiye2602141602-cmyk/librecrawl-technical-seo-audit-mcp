@@ -1,7 +1,9 @@
 # Master SEO Audit Completion Design
 
-**Date:** 2026-08-09  
-**Status:** Approved by the user-provided takeover specification  
+**Date:** 2026-08-09
+
+**Status:** Approved by the user-provided takeover specification
+
 **Repository baseline:** `9448066` on `feat/master-audit-foundation`; 457 tests pass
 
 ## Objective
