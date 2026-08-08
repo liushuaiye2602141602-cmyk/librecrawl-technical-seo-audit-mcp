@@ -94,14 +94,20 @@ class RuleRunner:
         for name, provider in self.providers.items():
             if provider.is_available():
                 provider_name = provider.name
-                available_providers.add(provider_name)
+                provider_aliases = set(getattr(provider, "aliases", {provider_name}))
+                available_providers.update(provider_aliases)
                 try:
-                    provider.enrich_site(site_ctx)
-                    for pctx in page_contexts:
-                        provider.enrich_page(pctx)
+                    collect = getattr(provider, "collect", None)
+                    if callable(collect):
+                        if not collect(site_ctx, page_contexts, existing_data):
+                            available_providers.difference_update(provider_aliases)
+                    else:
+                        provider.enrich_site(site_ctx)
+                        for pctx in page_contexts:
+                            provider.enrich_page(pctx)
                 except Exception:
                     # Provider failed → mark unavailable, rules will get NOT_CHECKED
-                    available_providers.discard(provider_name)
+                    available_providers.difference_update(provider_aliases)
 
         # Step 3: Populate PSI cache if PageSpeedDataProvider is available
         psi_provider = self.providers.get("PageSpeed API")
