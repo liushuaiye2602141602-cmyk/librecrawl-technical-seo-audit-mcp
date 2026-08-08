@@ -169,10 +169,12 @@ class TestAdapterRegistration:
     PHASE6_IDS = {31, 77}
     PHASE7_IDS = {34, 35}
     PHASE8_IDS = {33}
+    PHASE9_IDS = {36, 64, 65, 68, 69}
     ALL_ADAPTER_IDS = (
         PHASE1_IDS | PHASE2_IDS | PHASE3_IDS | PHASE4A_IDS | PHASE4B_IDS |
-        PHASE4C_IDS | PHASE5_IDS | PHASE6_IDS | PHASE7_IDS | PHASE8_IDS
-    )  # 64 rules with adapters
+        PHASE4C_IDS | PHASE5_IDS | PHASE6_IDS | PHASE7_IDS | PHASE8_IDS |
+        PHASE9_IDS
+    )  # 69 rules with adapters
 
     def test_all_adapters_registered(self, harness):
         """Each rule with an adapter must have it registered (32 total)."""
@@ -209,8 +211,8 @@ class TestAdapterRegistration:
 
     def test_total_adapter_count(self, harness):
         """Exactly 48 adapters total through Phase 4B."""
-        assert len(harness._adapters) == 64, (
-            f"Expected 64 total adapters, got {len(harness._adapters)}"
+        assert len(harness._adapters) == 69, (
+            f"Expected 69 total adapters, got {len(harness._adapters)}"
         )
 
 

@@ -116,6 +116,12 @@ def _import_all():
         "ga4": ["check_gsc_ga4_config", "check_event_conversion_tracking"],
         # Phase 8: server access logs
         "server_logs": ["check_server_log_analysis"],
+        # Phase 9: read-only WordPress privileged snapshot
+        "wordpress_privileged": [
+            "check_wp_updates_security", "check_wp_cron_tasks",
+            "check_database_autoload_bloat", "check_admin_2fa",
+            "check_abandoned_plugins_themes",
+        ],
     }
     for mod, names in modules.items():
         _IMPORTS.update(_lazy_import(mod, names))
@@ -165,5 +171,9 @@ __all__ = [
     "check_gsc_ga4_config", "check_event_conversion_tracking",
     # Phase 8
     "check_server_log_analysis",
+    # Phase 9
+    "check_wp_updates_security", "check_wp_cron_tasks",
+    "check_database_autoload_bloat", "check_admin_2fa",
+    "check_abandoned_plugins_themes",
     "get_check",
 ]

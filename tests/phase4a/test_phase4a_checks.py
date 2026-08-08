@@ -1324,7 +1324,7 @@ class TestPhase4AClassificationIntegrity:
         assert not missing, f"Phase 4A rule_ids not in harness: {missing}"
         assert expected_rule_ids.issubset(registered)
 
-    def test_adapter_count_64(self):
+    def test_adapter_count_69(self):
         """Total: 18 P1 + 13 P2 + 8 P3 + 8 P4A + 1 P4B = 48."""
         from audit_rules.adapters import CompatibilityHarness
         from audit_rules.registry import load_registry
@@ -1336,6 +1336,6 @@ class TestPhase4AClassificationIntegrity:
 
         registry = load_registry(str(checklist), str(mapping))
         harness = CompatibilityHarness(registry)
-        assert len(harness._adapters) == 64, (
-            f"Expected 64 adapters, got {len(harness._adapters)}"
+        assert len(harness._adapters) == 69, (
+            f"Expected 69 adapters, got {len(harness._adapters)}"
         )

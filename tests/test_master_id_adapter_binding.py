@@ -125,6 +125,12 @@ MASTER_ID_ADAPTER_MAP = {
     35: "check_event_conversion_tracking",
     # Phase 8 (server logs)
     33: "check_server_log_analysis",
+    # Phase 9 (WordPress privileged snapshot)
+    36: "check_wp_updates_security",
+    64: "check_wp_cron_tasks",
+    65: "check_database_autoload_bloat",
+    68: "check_admin_2fa",
+    69: "check_abandoned_plugins_themes",
 }
 
 
@@ -285,12 +291,14 @@ class TestAdapterRegistration:
             34, 35,
         } | {
             33,
+        } | {
+            36, 64, 65, 68, 69,
         }
 
         # Get all registered adapter rule_ids
         adapter_rule_ids = set(harness._adapters.keys())
-        assert len(adapter_rule_ids) == 64, (
-            f"Expected 64 adapters through Phase 8, "
+        assert len(adapter_rule_ids) == 69, (
+            f"Expected 69 adapters through Phase 9, "
             f"got {len(adapter_rule_ids)}: {adapter_rule_ids}"
         )
 
@@ -352,8 +360,8 @@ class TestAdapterRegistration:
         harness = CompatibilityHarness(registry)
 
         func_ids = {id(f) for f in harness._adapters.values()}
-        assert len(func_ids) == 64, (
-            f"Expected 64 unique adapter functions through Phase 8, "
+        assert len(func_ids) == 69, (
+            f"Expected 69 unique adapter functions through Phase 9, "
             f"got {len(func_ids)}"
         )
 
@@ -436,7 +444,7 @@ class TestClassificationCrossCheck:
         counts = Counter(r.impl_status.value for r in registry)
 
         assert counts.get("EXISTING_FULL", 0) == 18
-        assert counts.get("EXISTING_PARTIAL", 0) == 42
+        assert counts.get("EXISTING_PARTIAL", 0) == 47
         assert counts.get("NEW_AUTO", 0) == 0
         assert counts.get("NEW_EXTERNAL_DATA", 0) == 7
-        assert counts.get("NEW_MANUAL", 0) == 13
+        assert counts.get("NEW_MANUAL", 0) == 8

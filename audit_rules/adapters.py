@@ -87,6 +87,10 @@ _PHASE7_CHECKS: dict[str, Callable] = {}
 _PHASE8_CHECKS_LOADED = False
 _PHASE8_CHECKS: dict[str, Callable] = {}
 
+# Phase 9: WordPress privileged snapshot checks
+_PHASE9_CHECKS_LOADED = False
+_PHASE9_CHECKS: dict[str, Callable] = {}
+
 
 def _load_phase2_checks() -> dict[str, Callable]:
     """Import Phase 2 check functions lazily."""
@@ -299,6 +303,28 @@ def _load_phase8_checks() -> dict[str, Callable]:
     return _PHASE8_CHECKS
 
 
+def _load_phase9_checks() -> dict[str, Callable]:
+    global _PHASE9_CHECKS_LOADED, _PHASE9_CHECKS
+    if _PHASE9_CHECKS_LOADED:
+        return _PHASE9_CHECKS
+    try:
+        from audit_rules.checks import get_check
+        for rule_id, check_name in {
+            "wp_updates_security": "check_wp_updates_security",
+            "wp_cron_tasks": "check_wp_cron_tasks",
+            "database_autoload_bloat": "check_database_autoload_bloat",
+            "admin_2fa": "check_admin_2fa",
+            "abandoned_plugins_themes": "check_abandoned_plugins_themes",
+        }.items():
+            check = get_check(check_name)
+            if check is not None:
+                _PHASE9_CHECKS[rule_id] = check
+        _PHASE9_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE9_CHECKS
+
+
 @dataclass
 class CompatibilityHarness:
     """Binds EXISTING_FULL (18), EXISTING_PARTIAL (13), and performance (8)
@@ -379,6 +405,8 @@ class CompatibilityHarness:
         self._adapters.update(phase7)
         phase8 = _load_phase8_checks()
         self._adapters.update(phase8)
+        phase9 = _load_phase9_checks()
+        self._adapters.update(phase9)
 
     def run(
         self,

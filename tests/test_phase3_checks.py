@@ -606,8 +606,8 @@ class TestPhase3AdapterRegistration:
         from audit_rules.registry import load_registry
         registry = load_registry()
         harness = CompatibilityHarness(registry)
-        assert len(harness._adapters) == 64, (
-            f"Expected 64 adapters through Phase 8, got {len(harness._adapters)}"
+        assert len(harness._adapters) == 69, (
+            f"Expected 69 adapters through Phase 9, got {len(harness._adapters)}"
         )
 
     def test_phase3_rule_ids_registered(self):
