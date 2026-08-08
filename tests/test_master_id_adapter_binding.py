@@ -112,6 +112,11 @@ MASTER_ID_ADAPTER_MAP = {
     25: "check_https_certificate",
     40: "check_audit_deliverables",
     66: "check_cache_plugin_cdn_synergy",
+    # Phase 5 (Google Search Console)
+    44: "check_google_selected_canonical",
+    52: "check_keyword_cannibalization",
+    75: "check_device_country_ranking",
+    76: "check_declining_page_keyword_map",
 }
 
 
@@ -264,12 +269,14 @@ class TestAdapterRegistration:
             74,
         } | {
             2, 5, 13, 23, 25, 40, 66,
+        } | {
+            44, 52, 75, 76,
         }
 
         # Get all registered adapter rule_ids
         adapter_rule_ids = set(harness._adapters.keys())
-        assert len(adapter_rule_ids) == 55, (
-            f"Expected 55 adapters through Phase 4C, "
+        assert len(adapter_rule_ids) == 59, (
+            f"Expected 59 adapters through Phase 5, "
             f"got {len(adapter_rule_ids)}: {adapter_rule_ids}"
         )
 
@@ -331,8 +338,8 @@ class TestAdapterRegistration:
         harness = CompatibilityHarness(registry)
 
         func_ids = {id(f) for f in harness._adapters.values()}
-        assert len(func_ids) == 55, (
-            f"Expected 55 unique adapter functions through Phase 4C, "
+        assert len(func_ids) == 59, (
+            f"Expected 59 unique adapter functions through Phase 5, "
             f"got {len(func_ids)}"
         )
 
@@ -415,7 +422,7 @@ class TestClassificationCrossCheck:
         counts = Counter(r.impl_status.value for r in registry)
 
         assert counts.get("EXISTING_FULL", 0) == 18
-        assert counts.get("EXISTING_PARTIAL", 0) == 33
+        assert counts.get("EXISTING_PARTIAL", 0) == 37
         assert counts.get("NEW_AUTO", 0) == 0
-        assert counts.get("NEW_EXTERNAL_DATA", 0) == 16
+        assert counts.get("NEW_EXTERNAL_DATA", 0) == 12
         assert counts.get("NEW_MANUAL", 0) == 13

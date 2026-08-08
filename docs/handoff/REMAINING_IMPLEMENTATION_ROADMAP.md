@@ -149,6 +149,12 @@ For each rule: review current check function → identify enhancement → write 
 
 ## Workstream 4: GSC Provider Implementation
 
+**Status (2026-08-09):** Offline implementation complete. The REST client,
+V3 provider, runner aliases, and Rules 44/52/75/76 are covered by contract and
+integration tests. Live validation remains `LIVE_VALIDATION_PENDING` until a
+verified-property OAuth token is supplied. Rule 72 remains manual because the
+public API does not expose Manual Actions/Security Issues.
+
 **Priority:** P0 — unblocks 9 rules
 **Depends on:** GSC OAuth credentials
 

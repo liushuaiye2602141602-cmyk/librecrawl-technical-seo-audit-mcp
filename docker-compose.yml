@@ -35,6 +35,12 @@ services:
       - REPORTS_DIR=/reports
       - LIBRECRAWL_UPSTREAM_DB=/librecrawl-data/users.db
       - PAGESPEED_API_KEY=${PAGESPEED_API_KEY:-}
+      - MASTER_AUDIT_V3_ENABLED=${MASTER_AUDIT_V3_ENABLED:-false}
+      - MASTER_AUDIT_GSC_ENABLED=${MASTER_AUDIT_GSC_ENABLED:-true}
+      - GSC_ACCESS_TOKEN=${GSC_ACCESS_TOKEN:-}
+      - GSC_SITE_URL=${GSC_SITE_URL:-}
+      - GSC_INSPECTION_LIMIT=${GSC_INSPECTION_LIMIT:-20}
+      - GSC_ANALYTICS_MAX_ROWS=${GSC_ANALYTICS_MAX_ROWS:-50000}
     volumes:
       - ./reports:/reports
       - librecrawl-data:/librecrawl-data:ro

@@ -14,6 +14,12 @@ Everything is configured through environment variables. All are optional — the
 | `REPORTS_DIR` | `~/librecrawl-reports` | Directory where audit zips are written. Docker mounts this to `./reports`. |
 | `LIBRECRAWL_UPSTREAM_DB` | `~/.librecrawl/upstream/users.db` | Path to LibreCrawl's SQLite file, used for orphan-page and cleanup checks. If the file isn't reachable, those specific checks skip gracefully — the core audit is unaffected. |
 | `PAGESPEED_API_KEY` | unset | Google PageSpeed Insights API key. Enables the `librecrawl_pagespeed*` tools and raises PSI rate limits (25k/day). |
+| `MASTER_AUDIT_V3_ENABLED` | `false` | Master gate for the 80-rule V3 pipeline. |
+| `MASTER_AUDIT_GSC_ENABLED` | `true` | Enables the GSC provider when V3 is enabled and credentials are present. |
+| `GSC_ACCESS_TOKEN` | unset | Short-lived OAuth 2.0 bearer token with Search Console read-only access. Never use the PageSpeed API key here. |
+| `GSC_SITE_URL` | unset | Exact Search Console property: a URL-prefix property including its trailing slash, or `sc-domain:example.com`. |
+| `GSC_INSPECTION_LIMIT` | `20` | Deterministic per-audit URL Inspection sample; bounded to 100. |
+| `GSC_ANALYTICS_MAX_ROWS` | `50000` | Maximum Search Analytics rows per 28-day window; each API page is bounded to 25,000. |
 
 ## Transports
 
@@ -63,6 +69,10 @@ environment:
   - REPORTS_DIR=/reports
   - LIBRECRAWL_UPSTREAM_DB=/librecrawl-data/users.db
   - PAGESPEED_API_KEY=${PAGESPEED_API_KEY:-}
+  - MASTER_AUDIT_V3_ENABLED=${MASTER_AUDIT_V3_ENABLED:-false}
+  - MASTER_AUDIT_GSC_ENABLED=${MASTER_AUDIT_GSC_ENABLED:-true}
+  - GSC_ACCESS_TOKEN=${GSC_ACCESS_TOKEN:-}
+  - GSC_SITE_URL=${GSC_SITE_URL:-}
 ```
 
-Pass a PageSpeed key by putting `PAGESPEED_API_KEY=...` in a `.env` file next to `docker-compose.yml` (copy `.env.example`). The MCP port is published on loopback only (`127.0.0.1:5081`); change the port mapping in `docker-compose.yml` to expose it elsewhere.
+Put credentials in a local `.env` next to `docker-compose.yml` (copy `.env.example`). GSC private data requires OAuth 2.0; an API key is insufficient. Access tokens are short-lived, so production deployments should inject a refreshed token through their secret manager. The MCP port is published on loopback only (`127.0.0.1:5081`); change the port mapping deliberately to expose it elsewhere.

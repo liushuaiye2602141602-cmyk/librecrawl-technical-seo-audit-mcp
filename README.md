@@ -444,6 +444,8 @@ All environment variables are optional — the defaults just work. Set them via 
 | `AUDIT_SNAPSHOT_OUTPUT_DIR` | `REPORTS_DIR` | Persistent directory for current snapshots and crawl diffs |
 | `LIBRECRAWL_UPSTREAM_DB` | `~/.librecrawl/upstream/users.db` | LibreCrawl's SQLite, for orphan/cleanup checks (degrades gracefully if absent) |
 | `PAGESPEED_API_KEY` | unset | Optional — enables `librecrawl_pagespeed*` (raises PSI limits) |
+| `GSC_ACCESS_TOKEN` | unset | Optional OAuth 2.0 token for V3 Search Console evidence |
+| `GSC_SITE_URL` | unset | Exact URL-prefix or `sc-domain:` Search Console property |
 
 📖 Full reference, per-client config, and transport details: **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)**.
 
