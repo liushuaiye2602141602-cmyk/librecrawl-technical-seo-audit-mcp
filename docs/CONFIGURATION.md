@@ -27,6 +27,11 @@ Everything is configured through environment variables. All are optional — the
 | `MASTER_AUDIT_GA4_ENABLED` | `true` | Enables the GA4 provider when V3 and OAuth configuration are present. |
 | `GA4_ACCESS_TOKEN` | unset | Short-lived OAuth bearer token with `analytics.readonly` access. |
 | `GA4_PROPERTY_ID` | unset | Numeric GA4 property ID or `properties/{id}` resource name. |
+| `MASTER_AUDIT_SERVER_LOGS_ENABLED` | `true` | Enables access-log parsing when V3 and a readable file are present. |
+| `SERVER_LOG_PATH` | unset | Explicit Apache/Nginx Combined or JSON-lines access-log file. |
+| `SERVER_LOG_MAX_LINES` | `1000000` | Streaming line cap, bounded to 5,000,000. |
+
+For Docker, mount the chosen log file read-only into the MCP container and set `SERVER_LOG_PATH` to its container path. The provider stores aggregates only; IPs, raw user agents, query values, and source lines are not copied into audit output.
 
 ## Transports
 

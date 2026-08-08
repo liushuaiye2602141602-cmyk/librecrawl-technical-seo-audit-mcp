@@ -228,6 +228,10 @@ pending a paid v4 API key.
 
 ## Workstream 6: Server Log Provider Implementation
 
+**Status (2026-08-09):** Streaming Combined/JSON parser, privacy-safe
+aggregates, Rule 33, and Rule 5 bot-frequency enrichment are implemented and
+tested. Production input validation remains pending an explicit real log file.
+
 **Priority:** P1 — unblocks 3 rules
 **Depends on:** Server log file access
 

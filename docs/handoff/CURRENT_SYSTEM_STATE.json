@@ -1,12 +1,12 @@
 {
   "generated_at": "2026-08-09T05:12:54+08:00",
   "git_branch": "feat/master-audit-completion",
-  "git_head": "f51c85e",
-  "git_commit_short": "f51c85e",
+  "git_head": "1f529db",
+  "git_commit_short": "1f529db",
   "python": "3.14.5",
   "tests": {
-    "collected": 605,
-    "passed": 605,
+    "collected": 617,
+    "passed": 617,
     "failed": 0,
     "skipped": 0
   },
@@ -17,12 +17,12 @@
     "missing": 0,
     "classifications": {
       "EXISTING_FULL": 18,
-      "EXISTING_PARTIAL": 41,
-      "NEW_EXTERNAL_DATA": 8,
+      "EXISTING_PARTIAL": 42,
+      "NEW_EXTERNAL_DATA": 7,
       "NEW_MANUAL": 13,
       "NEW_AUTO": 0
     },
-    "adapter_count": 63,
+    "adapter_count": 64,
     "partial_rules_without_adapters": 0,
     "phase4a_completed_rules": [18, 32, 39, 43, 47, 51, 60, 67],
     "phase4b_completed_rules": [74],
@@ -67,7 +67,13 @@
       "client_module": "audit_rules/providers/ga4_client.py",
       "rules": [34, 35]
     },
-    "server_logs": {"status": "NOT_STARTED", "module": null},
+    "server_logs": {
+      "status": "IMPLEMENTED",
+      "input_validated": false,
+      "note": "FORMATS_AND_RULES_VALIDATED; REAL_LOG_INPUT_PENDING",
+      "module": "audit_rules/providers/server_log_provider.py",
+      "rules": [5, 33]
+    },
     "wordpress_privileged": {"status": "NOT_STARTED", "module": null}
   },
   "artifacts": {
@@ -106,6 +112,9 @@
     "MASTER_AUDIT_GA4_ENABLED": {"default": "true", "desc": "Enable GA4 provider within V3"},
     "GA4_ACCESS_TOKEN": {"default": "", "desc": "Short-lived analytics.readonly OAuth token"},
     "GA4_PROPERTY_ID": {"default": "", "desc": "GA4 property identifier"},
+    "MASTER_AUDIT_SERVER_LOGS_ENABLED": {"default": "true", "desc": "Enable local access-log provider"},
+    "SERVER_LOG_PATH": {"default": "", "desc": "Explicit read-only access-log file"},
+    "SERVER_LOG_MAX_LINES": {"default": "1000000", "desc": "Streaming line cap"},
     "PAGESPEED_API_KEY": {"default": "", "desc": "Google PSI API key"},
     "PSI_SAMPLE_LIMIT": {"default": "20", "desc": "Max URLs for PSI per session"},
     "PSI_STRATEGIES": {
@@ -132,6 +141,7 @@
   "live_validations_pending": [
     "GSC_OAUTH_PROPERTY_VALIDATION",
     "SEMRUSH_V4_PAID_KEY_VALIDATION",
-    "GA4_OAUTH_PROPERTY_VALIDATION"
+    "GA4_OAUTH_PROPERTY_VALIDATION",
+    "REAL_SERVER_LOG_INPUT_VALIDATION"
   ]
 }

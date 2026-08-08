@@ -48,6 +48,9 @@ services:
       - MASTER_AUDIT_GA4_ENABLED=${MASTER_AUDIT_GA4_ENABLED:-true}
       - GA4_ACCESS_TOKEN=${GA4_ACCESS_TOKEN:-}
       - GA4_PROPERTY_ID=${GA4_PROPERTY_ID:-}
+      - MASTER_AUDIT_SERVER_LOGS_ENABLED=${MASTER_AUDIT_SERVER_LOGS_ENABLED:-true}
+      - SERVER_LOG_PATH=${SERVER_LOG_PATH:-}
+      - SERVER_LOG_MAX_LINES=${SERVER_LOG_MAX_LINES:-1000000}
     volumes:
       - ./reports:/reports
       - librecrawl-data:/librecrawl-data:ro
