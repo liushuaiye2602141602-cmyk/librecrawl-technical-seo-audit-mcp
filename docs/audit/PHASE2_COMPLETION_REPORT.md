@@ -1,8 +1,9 @@
 # Phase 2 — EXISTING_PARTIAL Local Enhancement: Completion Report
 
 **Date:** 2026-08-09
-**Tests:** 270 passed (0 failed)
+**Tests:** 270 passed (0 failed) — up from 210 in Phase 1: +60 new tests
 **Commit baseline:** `21f6a0c`
+**Phase 2 HEAD:** `8506de7`
 
 ---
 
@@ -106,7 +107,7 @@ audit_rules/checks/
 |------|--------|
 | `audit_rules/adapters.py` | Added `_load_phase2_checks()` lazy loader; Phase 2 checks merged into `_adapters`; renamed `run_existing_full()` → `run()` |
 | `audit_rules/runner.py` | Updated to call `harness.run()`; added task CSV generation in `_finalize_session()` |
-| `tests/test_existing_full_compatibility.py` | Updated adapter counts (18→31), test names, perfect-site test for INFO findings |
+| `tests/test_existing_full_compatibility.py` | Updated adapter counts (18→31), test names, perfect-site test for INFO findings; +2 registration count tests (32 total) |
 | `tests/test_master_id_adapter_binding.py` | Added Phase 2 mappings; updated adapter count to 31 |
 | `docs/audit/PHASE2_RULE_SCOPE.md` | Pre-flight scope document (unchanged since Step 2) |
 
@@ -115,14 +116,27 @@ audit_rules/checks/
 | File | Description |
 |------|-------------|
 | `audit_rules/checks/*` | 8 check modules with 14 functions |
+| `tests/test_phase2_partial_rule_set.py` | 8 preflight tests (rule ID verification, 3-bucket classification) |
 | `tests/test_phase2_checks.py` | 50 TDD tests (positive, negative, edge cases, false-positive prevention) |
 | `docs/audit/PHASE2_COMPLETION_REPORT.md` | This report |
+
+### Test count breakdown
+
+| Source | Count |
+|--------|-------|
+| Phase 1 baseline (`21f6a0c`) | 210 |
+| `test_phase2_partial_rule_set.py` (preflight, `0ddd66e`) | +8 |
+| `test_phase2_checks.py` (TDD) | +50 |
+| `test_existing_full_compatibility.py` (registration count) | +2 |
+| **Phase 2 HEAD (`8506de7`)** | **270** |
+
+Delta from Phase 1: **+60 tests**.
 
 ---
 
 ## TDD Results
 
-All 13 check functions are verified through 50 tests:
+All 13 check functions are verified through 50 TDD tests in `test_phase2_checks.py`:
 
 - **Positive cases**: Known-bad inputs → findings produced (e.g., thin content, broken permalinks, schema conflicts, near-duplicates)
 - **Negative cases (false-positive prevention)**: Known-good inputs → zero actionable findings
@@ -179,9 +193,9 @@ All checks use only in-memory data from `PageContext` — zero HTTP requests.
 - [x] response_headers not in EXPORT_FIELDS → Rules 23/66 blocked (Step 19)
 - [x] No external APIs used (Step 20)
 - [x] Honest coverage — before/after documented (Step 21)
-- [x] TDD — 50 tests, positive + negative + false-positive (Steps 22–23)
+- [x] TDD — 60 new tests (8 preflight + 50 checks + 2 registration), positive + negative + false-positive (Steps 22–23)
 - [x] Performance reviewed (Step 24)
-- [x] 270 total tests — all passing (Step 25)
+- [x] 270 total tests — all passing; no detected regression in current automated test suite (Step 25)
 - [x] Task CSV generation wired in `_finalize_session()` (Step 26)
 - [x] Completion report generated (Step 29)
 
