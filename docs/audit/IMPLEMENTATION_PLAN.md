@@ -282,7 +282,7 @@ Phase 8  ███████████████████████�
 | Risk | Severity | Mitigation |
 |------|:--------:|------------|
 | **Check regression** — migrated checks produce different results than original code | **HIGH** | Side-by-side run on 3 known domains; diff every CSV column; require 100% match on EXISTING_FULL rules |
-| **Performance regression** — PageContext caching adds memory; near-duplicate detection adds CPU | MEDIUM | Keep v2.1.1's 500-page cap; stream-process large pages; benchmark on 1900+ page site |
+| **Performance regression** — PageContext caching adds memory; near-duplicate detection adds CPU | MEDIUM | Use streaming batch processing for large page sets; benchmark on 1900+ page site |
 | **Import cycle hell** — 15 new modules risk circular imports | MEDIUM | Enforce dependency direction: registry ← providers ← checks ← runner ← server (one-way) |
 | **API rate limit exhaustion** — PSI + GSC + Semrush all hitting APIs during one finalize | MEDIUM | Configurable delays; sampling strategy for large sites; graceful NOT_CHECKED instead of failure |
 | **Environment fragmentation** — not all deployments have all API keys | LOW | Each provider self-tests availability; missing providers → NOT_CHECKED for their rules, not error |
@@ -333,9 +333,9 @@ After each phase, the following must be confirmed before proceeding:
 
 1. **Phase 1 first** — Do not start coding until the architecture and registry design is approved
 2. **Current capability**: ~55 fragmented checks → **80 precisely defined rules** with unified taxonomy
-3. **Full automation target**: 68/80 rules (85%) at least partially automated
-4. **External dependencies**: 17 rules (21%) require external data (PageSpeed API key already available; GSC/Semrush/GA4/Server Logs optional)
-5. **Manual-only**: 12 rules (15%) that require human review — the system provides guidance but can't replace human judgment
+3. **Full automation target**: 67/80 rules (83.75%) at least partially automated (18 EXISTING_FULL + 24 EXISTING_PARTIAL + 9 NEW_AUTO + 16 NEW_EXTERNAL_DATA)
+4. **External dependencies**: 16 rules (20%) require external data (PageSpeed API key already available; GSC/Semrush/GA4/Server Logs optional)
+5. **Manual-only**: 13 rules (16.25%) that require human review — the system provides guidance but can't replace human judgment
 6. **Backward compatible**: Existing MCP tools, CSV formats, and zip structure preserved
 7. **Offline-testable**: All automated rules verifiable with HTML fixtures — no live internet needed in CI
 

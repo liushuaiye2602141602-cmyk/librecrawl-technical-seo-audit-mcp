@@ -38,8 +38,8 @@ A **Unified Audit Rule Registry** that:
 | **EXISTING_FULL** | 18 (22.5%) | Fully implemented, matches 80-item spec |
 | **EXISTING_PARTIAL** | 24 (30.0%) | Partially implemented, needs enhancement |
 | **NEW_AUTO** | 9 (11.25%) | Automatable with new code, no external deps |
-| **NEW_EXTERNAL_DATA** | 17 (21.25%) | Needs external API/access (GSC, PSI, Semrush, GA4, Server Logs) |
-| **NEW_MANUAL** | 12 (15.0%) | Requires human review, can't be fully automated |
+| **NEW_EXTERNAL_DATA** | 16 (20.0%) | Needs external API/access (GSC, PSI, Semrush, GA4, Server Logs) |
+| **NEW_MANUAL** | 13 (16.25%) | Requires human review, can't be fully automated |
 | **TOTAL** | **80 (100%)** | — |
 
 ---
@@ -439,7 +439,7 @@ Existing filenames and internal paths are unchanged. Two new files are added. Th
 | Metric | v2.2.0 | v3.0.0 Target |
 |--------|:------:|:-------------:|
 | Automated rules (Phase 1) | ~55 (fragmented) | 18 (EXISTING_FULL bindings) |
-| Automated rules (end state) | ~55 (fragmented) | 68 target |
+| Automated rules (end state) | ~55 (fragmented) | 67 target (18+24+9+16) |
 | Rules with unified severity | 0 | 80 |
 | Rules with test coverage | 0 | 18 (EXISTING_FULL) in Phase 1 |
 | Page fetches per audit (Phase 1) | 2× (crawl + checks re-fetch) | **0 extra** (uses existing export data; no re-fetch) |

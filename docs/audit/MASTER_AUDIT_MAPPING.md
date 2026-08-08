@@ -11,11 +11,11 @@
 | **EXISTING_FULL** | 18 | 22.5% | Rule fully implemented and matching 80-item spec |
 | **EXISTING_PARTIAL** | 24 | 30.0% | Rule partially implemented; gaps identified below |
 | **NEW_AUTO** | 9 | 11.25% | New rule that can be fully automated |
-| **NEW_EXTERNAL_DATA** | 17 | 21.25% | Requires external data source (API key, platform access, server access) |
-| **NEW_MANUAL** | 12 | 15.0% | Requires human review — cannot be fully automated |
+| **NEW_EXTERNAL_DATA** | 16 | 20.0% | Requires external data source (API key, platform access, server access) |
+| **NEW_MANUAL** | 13 | 16.25% | Requires human review — cannot be fully automated |
 | **TOTAL** | **80** | **100%** | — |
 
-**Key metric**: After all phases complete, **68 of 80 rules (85%) can be at least partially automated**, up from ~55 fragmented checks today.
+**Key metric**: After all phases complete, **67 of 80 rules (83.75%) can be at least partially automated** (18 EXISTING_FULL + 24 EXISTING_PARTIAL + 9 NEW_AUTO + 16 NEW_EXTERNAL_DATA), up from ~55 fragmented checks today.
 
 ---
 
@@ -190,7 +190,7 @@ The existing system has 4 different severity schemes. The unified taxonomy:
 
 | Provider | Required For Rules | Auto-Wired in Chunked Audit? | Fallback When Unavailable |
 |----------|-------------------|:---------------------------:|---------------------------|
-| LibreCrawl (core) | 68 rules | ✅ Always | N/A (required) |
+| LibreCrawl (core) | 67 rules (all EXISTING_FULL + EXISTING_PARTIAL + NEW_AUTO + NEW_EXTERNAL_DATA) | ✅ Always | N/A (required) |
 | PageSpeed API | 19, 21, 22, 24, 61, 62, 63 | ❌ → ✅ (Phase 3) | Skip PSI-dependent rules; mark NOT_CHECKED |
 | GSC API | 2, 44, 52, 72, 75, 76 | ❌ (data-fed only) | GSC rules marked NOT_CHECKED unless data is fed |
 | Semrush API | 31, 52, 75, 77 | ❌ → 🔌 (Phase 5) | Semrush rules marked NOT_CHECKED |

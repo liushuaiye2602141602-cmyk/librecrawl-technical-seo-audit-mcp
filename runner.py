@@ -461,6 +461,36 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
         # artifacts.
         state.log_event(sid, "pdf_generation_failed", str(e))
 
+    # ── v3.0 Phase 1: Master Audit V3 shadow pipeline ──────────────────────────
+    # Runs the unified 80-rule registry in parallel with existing audit code.
+    # Feature-flagged (MASTER_AUDIT_V3_ENABLED defaults to False) so existing
+    # behaviour is completely unchanged unless explicitly enabled.
+    try:
+        from audit_rules.integration import run_v3_pipeline, MASTER_AUDIT_V3_ENABLED
+        if MASTER_AUDIT_V3_ENABLED:
+            export_data = {
+                "site_check": site_data,
+                "pages": pages,
+                "links": links or [],
+            }
+            v3_findings, coverage_rows, coverage_csv = run_v3_pipeline(
+                export_data=export_data,
+                base_url=url,
+                completeness=completeness,
+            )
+            if coverage_csv:
+                cov_path = REPORTS_DIR / f"{domain}-{timestamp}.coverage.csv"
+                cov_path.write_text(coverage_csv, encoding="utf-8")
+                state.add_artifact(sid, "coverage_csv", cov_path)
+                state.log_event(sid, "v3_coverage_generated", {
+                    "rows": len(coverage_rows),
+                    "findings": len(v3_findings),
+                })
+    except Exception as e:
+        # V3 shadow pipeline is strictly additive — a failure here MUST NOT
+        # impact the existing audit artifacts (MD, PDF, CSVs, zip).
+        state.log_event(sid, "v3_pipeline_failed", str(e))
+
     state.log_event(sid, "finalized", {
         "pages": len(pages),
         "delay_at_finish_ms": last_delay_ms,
