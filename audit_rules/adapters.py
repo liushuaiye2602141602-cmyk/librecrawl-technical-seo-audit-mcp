@@ -71,6 +71,10 @@ _PHASE4B_CHECKS: dict[str, Callable] = {}
 _PHASE4C_CHECKS_LOADED = False
 _PHASE4C_CHECKS: dict[str, Callable] = {}
 
+# Phase 5: Google Search Console backed checks
+_PHASE5_CHECKS_LOADED = False
+_PHASE5_CHECKS: dict[str, Callable] = {}
+
 
 def _load_phase2_checks() -> dict[str, Callable]:
     """Import Phase 2 check functions lazily."""
@@ -207,6 +211,29 @@ def _load_phase4c_checks() -> dict[str, Callable]:
     return _PHASE4C_CHECKS
 
 
+def _load_phase5_checks() -> dict[str, Callable]:
+    """Import GSC-backed checks lazily."""
+    global _PHASE5_CHECKS_LOADED, _PHASE5_CHECKS
+    if _PHASE5_CHECKS_LOADED:
+        return _PHASE5_CHECKS
+    try:
+        from audit_rules.checks import get_check
+        checks_to_load = {
+            "google_selected_canonical": "check_google_selected_canonical",
+            "keyword_cannibalization": "check_keyword_cannibalization",
+            "device_country_ranking": "check_device_country_ranking",
+            "declining_page_keyword_map": "check_declining_page_keyword_map",
+        }
+        for rule_id, check_name in checks_to_load.items():
+            check = get_check(check_name)
+            if check is not None:
+                _PHASE5_CHECKS[rule_id] = check
+        _PHASE5_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE5_CHECKS
+
+
 @dataclass
 class CompatibilityHarness:
     """Binds EXISTING_FULL (18), EXISTING_PARTIAL (13), and performance (8)
@@ -279,6 +306,8 @@ class CompatibilityHarness:
         # Phase 4C: close the seven unbound EXISTING_PARTIAL entries.
         phase4c = _load_phase4c_checks()
         self._adapters.update(phase4c)
+        phase5 = _load_phase5_checks()
+        self._adapters.update(phase5)
 
     def run(
         self,

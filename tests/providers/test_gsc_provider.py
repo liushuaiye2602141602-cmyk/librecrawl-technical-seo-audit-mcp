@@ -136,3 +136,52 @@ def test_integration_registers_gsc_provider(monkeypatch):
 
     assert isinstance(runner.providers["GSC API"], GSCDataProvider)
     assert runner.providers["GSC API"].is_available() is False
+
+
+def test_runner_uses_gsc_aliases_and_reports_sampled_inspection(monkeypatch):
+    from audit_rules.categories import ExecutionStatus, ResultStatus
+    from audit_rules.providers.gsc_provider import GSCDataProvider
+    from audit_rules.registry import load_registry
+    from audit_rules.runner import RuleRunner
+
+    monkeypatch.setenv("MASTER_AUDIT_V3_ENABLED", "true")
+    provider = GSCDataProvider(
+        access_token="token", site_url="sc-domain:example.com", client=StubClient(),
+        today=date(2026, 8, 9), inspection_limit=1)
+    runner = RuleRunner(load_registry(), providers={provider.name: provider})
+    export = {"site_check": {}, "links": [], "pages": [
+        {"url": "https://example.com/a", "status_code": 200,
+         "canonical_url": "https://example.com/a"},
+        {"url": "https://example.com/b", "status_code": 200,
+         "canonical_url": "https://example.com/b"},
+    ]}
+
+    _, rows = runner.run_from_export(export, "https://example.com")
+    by_id = {row.audit_id: row for row in rows}
+    assert by_id[44].execution_status == ExecutionStatus.EXECUTED_PARTIAL
+    assert by_id[44].result_status == ResultStatus.PASS
+    assert "1/2" in by_id[44].not_checked_reason
+    for audit_id in (52, 75, 76):
+        assert by_id[audit_id].execution_status == ExecutionStatus.EXECUTED_FULL
+
+
+def test_runner_all_gsc_errors_are_not_checked_unknown(monkeypatch):
+    from audit_rules.categories import ExecutionStatus, ResultStatus
+    from audit_rules.providers.gsc_provider import GSCDataProvider
+    from audit_rules.registry import load_registry
+    from audit_rules.runner import RuleRunner
+
+    monkeypatch.setenv("MASTER_AUDIT_V3_ENABLED", "true")
+    provider = GSCDataProvider(
+        access_token="token", site_url="sc-domain:example.com",
+        client=StubClient(fail_all=True), today=date(2026, 8, 9))
+    runner = RuleRunner(load_registry(), providers={provider.name: provider})
+    export = {"site_check": {}, "links": [], "pages": [
+        {"url": "https://example.com/a", "status_code": 200}]}
+
+    _, rows = runner.run_from_export(export, "https://example.com")
+    by_id = {row.audit_id: row for row in rows}
+    for audit_id in (44, 52, 75, 76):
+        assert by_id[audit_id].execution_status == ExecutionStatus.NOT_CHECKED
+        assert by_id[audit_id].result_status == ResultStatus.UNKNOWN
+        assert by_id[audit_id].not_checked_reason == "Data source unavailable: GSC API"

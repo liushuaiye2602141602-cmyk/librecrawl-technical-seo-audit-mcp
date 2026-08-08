@@ -106,9 +106,10 @@ class GSCDataProvider(DataProvider):
         except Exception as exc:
             errors.append(f"sitemaps:{type(exc).__name__}")
 
-        eligible = sorted(
+        all_eligible = sorted(
             (page for page in page_contexts if page.status_code == 200 and page.url),
-            key=lambda page: page.url)[:self._inspection_limit]
+            key=lambda page: page.url)
+        eligible = all_eligible[:self._inspection_limit]
         inspections: dict[str, dict] = {}
         inspection_failed = False
         for page in eligible:
@@ -127,6 +128,7 @@ class GSCDataProvider(DataProvider):
 
         payload = {
             **windows, "sitemaps": sitemaps, "inspections": inspections,
+            "inspection_eligible": len(all_eligible),
             "inspection_attempted": len(eligible),
             "inspection_succeeded": len(inspections), "errors": errors,
             "current_start": current_start.isoformat(), "current_end": end.isoformat(),
