@@ -73,6 +73,7 @@ def _build_runner() -> "RuleRunner":
     from audit_rules.providers.wordpress_privileged_provider import WordPressPrivilegedProvider
     from audit_rules.providers.render_snapshot_provider import RenderSnapshotProvider
     from audit_rules.providers.availability_snapshot_provider import AvailabilitySnapshotProvider
+    from audit_rules.providers.manual_review_provider import ManualReviewDataProvider
     from audit_rules.registry import load_registry
     from audit_rules.runner import RuleRunner
 
@@ -85,6 +86,7 @@ def _build_runner() -> "RuleRunner":
     wordpress = WordPressPrivilegedProvider()
     rendered = RenderSnapshotProvider()
     availability = AvailabilitySnapshotProvider()
+    manual_review = ManualReviewDataProvider()
     return RuleRunner(
         registry,
         providers={pagespeed.name: pagespeed, gsc.name: gsc,
@@ -92,7 +94,8 @@ def _build_runner() -> "RuleRunner":
                    server_logs.name: server_logs,
                    wordpress.name: wordpress,
                    rendered.name: rendered,
-                   availability.name: availability},
+                   availability.name: availability,
+                   manual_review.name: manual_review},
     )
 
 

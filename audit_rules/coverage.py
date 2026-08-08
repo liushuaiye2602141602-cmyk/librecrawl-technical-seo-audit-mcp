@@ -45,6 +45,7 @@ class CoverageManager:
         executed_rule_ids: set[int] | None = None,
         partially_executed_rule_ids: set[int] | None = None,
         not_checked_reasons: dict[int, str] | None = None,
+        manual_outcomes: dict | None = None,
     ) -> list[CoverageRow]:
         """Compute 80 CoverageRow entries from registry + contexts + findings.
 
@@ -60,6 +61,7 @@ class CoverageManager:
         if providers_available is None:
             providers_available = {"LibreCrawl"}
         not_checked_reasons = not_checked_reasons or {}
+        manual_outcomes = manual_outcomes or {}
 
         # Index findings by rule_id for O(1) lookup
         findings_by_rule: dict[int, list[Finding]] = {}
@@ -76,6 +78,7 @@ class CoverageManager:
                 total_pages, providers_available, executed_rule_ids,
                 partially_executed_rule_ids,
                 not_checked_reasons,
+                manual_outcomes,
             )
 
             # Count eligible pages
@@ -122,6 +125,7 @@ class CoverageManager:
         executed_rule_ids: set[int] | None,
         partially_executed_rule_ids: set[int] | None,
         not_checked_reasons: dict[int, str],
+        manual_outcomes: dict,
     ) -> tuple[ExecutionStatus, ResultStatus, str]:
         """Determine ExecutionStatus + ResultStatus for a single rule.
 
@@ -135,6 +139,15 @@ class CoverageManager:
 
         # Case D: Manual-only rules → NOT_CHECKED + UNKNOWN
         if rule.impl_status == ImplStatus.NEW_MANUAL:
+            outcome = manual_outcomes.get(rule.audit_id)
+            if outcome is not None:
+                if outcome.status == "NOT_APPLICABLE":
+                    return (ExecutionStatus.NOT_APPLICABLE, ResultStatus.UNKNOWN,
+                            "Reviewer marked not applicable")
+                result = {"PASS": ResultStatus.PASS,
+                          "WARNING": ResultStatus.WARNING,
+                          "FAIL": ResultStatus.FAIL}[outcome.status]
+                return ExecutionStatus.EXECUTED_FULL, result, ""
             return (
                 ExecutionStatus.NOT_CHECKED,
                 ResultStatus.UNKNOWN,

@@ -146,6 +146,11 @@ class RuleRunner:
         findings = self.harness.run(
             site_ctx, page_contexts, existing_data,
         )
+        manual_outcomes = existing_data.get("manual_review_outcomes") or {}
+        if manual_outcomes:
+            from audit_rules.manual_review import findings_from_manual_outcomes
+            findings.extend(findings_from_manual_outcomes(
+                manual_outcomes, self.registry))
 
         # Step 5: Release heavy fields from all pages
         for pctx in page_contexts:
@@ -159,6 +164,7 @@ class RuleRunner:
             executed_rule_ids=self.harness.completed_rule_ids,
             partially_executed_rule_ids=self.harness.partially_completed_rule_ids,
             not_checked_reasons=self.harness.not_checked_reasons,
+            manual_outcomes=manual_outcomes,
         )
 
         return findings, coverage_rows
