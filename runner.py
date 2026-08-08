@@ -50,6 +50,26 @@ _wake = threading.Event()
 _shutdown = threading.Event()
 
 
+def _write_manual_review_artifact(
+    sid: str,
+    base_url: str,
+    domain: str,
+    timestamp: str,
+    reports_dir: Path,
+) -> Path:
+    """Generate and register the review template for current manual rules."""
+    from audit_rules.manual_review import generate_manual_review_template
+    from audit_rules.registry import load_registry
+
+    path = Path(reports_dir) / f"{domain}-{timestamp}.manual-review.md"
+    path.write_text(
+        generate_manual_review_template(load_registry(), base_url),
+        encoding="utf-8",
+    )
+    state.add_artifact(sid, "manual_review_md", path)
+    return path
+
+
 def _prepare_snapshot_artifacts(
     sid: str,
     export_data: dict,
@@ -561,6 +581,18 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
                     "rows": len(coverage_rows),
                     "findings": len(v3_findings),
                 })
+
+                # Always emit the registry-driven async review template. It is
+                # additive and keeps manual rules truthful until a reviewer
+                # completes and parses the artifact.
+                try:
+                    manual_path = _write_manual_review_artifact(
+                        sid, url, domain, timestamp, REPORTS_DIR)
+                    state.log_event(sid, "v3_manual_review_generated", {
+                        "path": str(manual_path),
+                    })
+                except Exception:
+                    pass
 
                 # Generate master-audit-tasks.csv from all findings (Rule 40)
                 try:
