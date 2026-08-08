@@ -42,6 +42,8 @@ class CoverageManager:
         page_contexts: list[PageContext],
         findings: list[Finding],
         providers_available: set[str] | None = None,
+        executed_rule_ids: set[int] | None = None,
+        not_checked_reasons: dict[int, str] | None = None,
     ) -> list[CoverageRow]:
         """Compute 80 CoverageRow entries from registry + contexts + findings.
 
@@ -56,6 +58,7 @@ class CoverageManager:
         """
         if providers_available is None:
             providers_available = {"LibreCrawl"}
+        not_checked_reasons = not_checked_reasons or {}
 
         # Index findings by rule_id for O(1) lookup
         findings_by_rule: dict[int, list[Finding]] = {}
@@ -69,7 +72,8 @@ class CoverageManager:
             rule_findings = findings_by_rule.get(rule.audit_id, [])
             exec_status, result_status, reason = self._evaluate_coverage(
                 rule, rule_findings, site_ctx, page_contexts,
-                total_pages, providers_available,
+                total_pages, providers_available, executed_rule_ids,
+                not_checked_reasons,
             )
 
             # Count eligible pages
@@ -113,6 +117,8 @@ class CoverageManager:
         page_contexts: list[PageContext],
         total_pages: int,
         providers_available: set[str],
+        executed_rule_ids: set[int] | None,
+        not_checked_reasons: dict[int, str],
     ) -> tuple[ExecutionStatus, ResultStatus, str]:
         """Determine ExecutionStatus + ResultStatus for a single rule.
 
@@ -140,6 +146,16 @@ class CoverageManager:
                     ResultStatus.UNKNOWN,
                     f"Data source unavailable: {src}",
                 )
+
+        if executed_rule_ids is not None and rule.audit_id not in executed_rule_ids:
+            return (
+                ExecutionStatus.NOT_CHECKED,
+                ResultStatus.UNKNOWN,
+                not_checked_reasons.get(
+                    rule.audit_id,
+                    "No registered adapter executed",
+                ),
+            )
 
         # No findings → was it executed?
         if not findings:

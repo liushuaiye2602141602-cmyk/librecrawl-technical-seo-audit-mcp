@@ -39,6 +39,10 @@ from audit_rules.context import SiteContext, PageContext
 # Type alias for adapter function signature
 AdapterFunc = Callable[..., list[Finding]]
 
+
+class DataUnavailableError(RuntimeError):
+    """Raised when required crawl evidence was not exported."""
+
 # Lazy import for Phase 2 checks (avoids import errors when checks/ is being built)
 _PHASE2_CHECKS_LOADED = False
 _PHASE2_CHECKS: dict[str, Callable] = {}
@@ -176,6 +180,8 @@ class CompatibilityHarness:
 
     registry: list[RuleDefinition]
     _adapters: dict[str, AdapterFunc] = field(default_factory=dict)
+    completed_rule_ids: set[int] = field(default_factory=set, init=False)
+    not_checked_reasons: dict[int, str] = field(default_factory=dict, init=False)
 
     def __post_init__(self):
         """Register Phase 1 (18) + Phase 2 (13) + Phase 3 (8) adapters."""
@@ -243,6 +249,8 @@ class CompatibilityHarness:
             List of Finding objects for all executed rules.
         """
         all_findings: list[Finding] = []
+        self.completed_rule_ids = set()
+        self.not_checked_reasons = {}
         for rule in self.registry:
             if rule.rule_id not in self._adapters:
                 continue
@@ -250,8 +258,14 @@ class CompatibilityHarness:
             try:
                 findings = adapter(rule, site_ctx, page_contexts, existing_data)
                 all_findings.extend(findings)
-            except Exception:
-                # Adapter failed — rule gets NOT_CHECKED (no findings = no execution)
+                self.completed_rule_ids.add(rule.audit_id)
+            except DataUnavailableError as exc:
+                self.not_checked_reasons[rule.audit_id] = str(exc)
+                continue
+            except Exception as exc:
+                self.not_checked_reasons[rule.audit_id] = (
+                    f"Adapter failed ({type(exc).__name__})"
+                )
                 continue
         return all_findings
 

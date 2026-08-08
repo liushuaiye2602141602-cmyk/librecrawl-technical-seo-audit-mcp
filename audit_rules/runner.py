@@ -135,6 +135,8 @@ class RuleRunner:
         coverage_rows = mgr.compute(
             site_ctx, page_contexts, findings,
             providers_available=available_providers,
+            executed_rule_ids=self.harness.completed_rule_ids,
+            not_checked_reasons=self.harness.not_checked_reasons,
         )
 
         return findings, coverage_rows
