@@ -1,0 +1,126 @@
+{
+  "generated_at": "2026-08-08T20:29:48.627348+00:00",
+  "git_branch": "feat/master-audit-foundation",
+  "git_head": "328760f38ddd4e2375c4682278aa2b0eb72dbf06",
+  "git_commit_short": "328760f",
+  "python": "3.14.5",
+  "tests": {
+    "collected": 457,
+    "passed": 457,
+    "failed": 0,
+    "skipped": 0
+  },
+  "rules": {
+    "total": 80,
+    "id_range": "1..80",
+    "duplicates": 0,
+    "missing": 0,
+    "classifications": {
+      "EXISTING_FULL": 18,
+      "EXISTING_PARTIAL": 32,
+      "NEW_EXTERNAL_DATA": 16,
+      "NEW_MANUAL": 13,
+      "NEW_AUTO": 1
+    },
+    "adapter_count": 47,
+    "phase4a_completed_rules": [
+      18,
+      32,
+      39,
+      43,
+      47,
+      51,
+      60,
+      67
+    ],
+    "phase4b_deferred_rules": [
+      74
+    ]
+  },
+  "providers": {
+    "librecrawl": {
+      "status": "IMPLEMENTED",
+      "module": "audit_rules/providers/librecrawl_provider.py"
+    },
+    "pagespeed": {
+      "status": "IMPLEMENTED",
+      "live_validated": true,
+      "note": "KEY_PRESENT_NOT_SMOKE_TESTED",
+      "module": "audit_rules/providers/pagespeed_provider.py"
+    },
+    "gsc": {
+      "status": "NOT_STARTED",
+      "module": null
+    },
+    "semrush": {
+      "status": "NOT_STARTED",
+      "module": null
+    },
+    "ga4": {
+      "status": "NOT_STARTED",
+      "module": null
+    },
+    "server_logs": {
+      "status": "NOT_STARTED",
+      "module": null
+    },
+    "wordpress_privileged": {
+      "status": "NOT_STARTED",
+      "module": null
+    }
+  },
+  "artifacts": {
+    "legacy": "server.py _build_report() outputs",
+    "coverage": {
+      "status": "IMPLEMENTED",
+      "file": "coverage.csv"
+    },
+    "tasks": {
+      "status": "IMPLEMENTED",
+      "file": "master-audit-tasks.csv"
+    },
+    "performance": {
+      "status": "IMPLEMENTED",
+      "file": "performance.csv"
+    },
+    "manual_review": {
+      "status": "NOT_STARTED"
+    },
+    "snapshot_diff": {
+      "status": "NOT_STARTED"
+    }
+  },
+  "feature_flags": {
+    "MASTER_AUDIT_V3_ENABLED": {
+      "default": "false",
+      "desc": "Master gate for V3 80-rule pipeline"
+    },
+    "MASTER_AUDIT_PSI_ENABLED": {
+      "default": "true",
+      "desc": "Enable PSI provider within V3"
+    },
+    "PAGESPEED_API_KEY": {
+      "default": "",
+      "desc": "Google PSI API key"
+    },
+    "PSI_SAMPLE_LIMIT": {
+      "default": "20",
+      "desc": "Max URLs for PSI per session"
+    },
+    "PSI_STRATEGIES": {
+      "default": "mobile",
+      "desc": "PSI strategies: mobile or mobile,desktop"
+    }
+  },
+  "known_credentials": {
+    "PAGESPEED_API_KEY": true,
+    "GSC_OAUTH": false,
+    "SEMRUSH_API_KEY": false,
+    "GA4_PROPERTY": false,
+    "SERVER_LOG_PATH": false,
+    "WP_ADMIN_CREDENTIALS": false
+  },
+  "live_validations_pending": [
+    "PSI_SMOKE_NOT_RUN"
+  ]
+}
