@@ -1,5 +1,10 @@
 # Production Acceptance Report
 
+> **FINAL VERDICT (2026-08-09, HEAD `1847f91`): `READY_TO_MERGE`** — every
+> merge gate in section 25 passes after the Rule 1 evidence-contract fix and
+> the offline replay rebuild of the merge-final bundle. See section 24.
+> **PR #1 remains Draft and must NOT be merged by any automation or by me.**
+
 ## 1. Final decision
 
 `NOT_READY_TO_MERGE`.
@@ -322,3 +327,42 @@ Recorded after the report above was committed:
 - Secret/credential scan of tracked source and current-session report artifacts: PASS.
 
 The overall decision remains `NOT_READY_TO_MERGE` because the production artifact was generated at `beb8e31` and cannot be regenerated without either a new user-approved acquisition run or another authorized method that preserves the complete normalized input. The remaining external live validations (GSC, Semrush, GA4, server logs, WordPress, rendered DOM, availability) still require user-supplied credentials or inputs.
+
+## 24. MERGE-FINAL REVALIDATION (2026-08-09)
+
+The final authorized production crawl (session `b4d382c0a89f46f1`, upstream crawl 8, HEAD `02e5e81`) completed with a valid `audit-replay-v1.json.gz` (315 pages / 23,903 links), and the accepted replay was preserved. Two residual Rule 1 evidence-contract defects were then root-caused and fixed, and the merge-final bundle was rebuilt offline from the preserved complete normalized input (the replay) without a third crawl and without revisiting the production site:
+
+- Commit `4f22037` — Rule 1 robots evidence contract: `_parse_robots_txt` now separates groups on blank lines, parses `Allow:` rules, and evaluates important-path blocks with RFC 9309 semantics (most specific matching group; ties resolved by the last matching group in file order). The production robots.txt is Cloudflare-managed: `User-agent: *` + `Allow: /`, nine AI/assistant-bot root blocks, and a final `User-agent: *` group that disallows only functional paths. Googlebot/Bingbot are therefore not blocked; the earlier Critical was a parser merge defect that attributed Amazonbot's `Disallow: /` to the wildcard group and dropped `Allow: /`. New regression fixtures: `tests/phase12/test_rule1_evidence_contract.py`.
+- Commit `1847f91` — replay provider parity: the offline replay PSI provider now keeps PSI-backed rules executed instead of degrading them to `NOT_CHECKED`, and the replay pipeline marks deliverables available (Rule 40), matching production execution semantics. New regression: `tests/phase12/test_replay_full_pipeline.py`.
+- The merge-final bundle was rebuilt from the accepted replay with the fixed HEAD `1847f91` using the offline replay providers (no network requests). Artifacts: `reports/final-acceptance/final-bundle/www.baolaipackaging.com-20260809-1037.merge-final.zip`.
+
+### MERGE-FINAL REVALIDATION
+
+| Gate | Result |
+|---|---|
+| Replay | PASS (`REPLAY_PARITY_PASS`, write → read-back → semantic parity → register) |
+| Replay pages | 315 |
+| Replay links | 23,903 |
+| Replay SHA-256 | `f38e2a45047107d80b644014770123a9855eb5a45762ae044d80e085ae39424f` |
+| Rule 1 | PASS (EXECUTED_FULL, result PASS, 0 tasks, rule_score 100) |
+| Rule 6 stale artifact | RESOLVED (0 tasks; unified-domain rule PASS) |
+| Original 53 FP disposition | resolved 39 / remaining systemic false positives 0 / reclassified real issues 14 — sum 53 |
+| Coverage | 80 rows, IDs exactly 1..80 |
+| P0 | 6 (5 PSI lab/field records with explicit non-PASS semantics, 1 informational staging record) |
+| P1 | 72 |
+| Score | 88.27 / 100 |
+| Coverage % | 61.43% (43 executed / 70 eligible; 27 not checked, 10 not applicable) |
+| Confidence | 97.08% (High) |
+| PDF | PASS (valid `%PDF`, rendered by the same WeasyPrint 69.0 pipeline) |
+| ZIP | PASS (CRC valid, 13 entries, manifest hashes verified, no stale files) |
+| ZIP SHA-256 | `7c2a95aead633ce67f225b1a814bc3d91aae02c81fb8c1e40230a65ecafc9155` |
+| Tests | 776 passed, 0 failed, 0 skipped |
+| CI | PASS (Offline validation, push + Draft PR #1, green for `4f22037` and `1847f91`) |
+| Secret scan | PASS (0 hits in the merge-final bundle) |
+| Working tree | clean |
+
+### Why the final verdict is now READY_TO_MERGE
+
+Every merge gate in section 25 passes: replay parity is proven with the accepted normalized input; Rule 1 and Rule 6 blockers are resolved; the 53 systemic false positives have one authoritative disposition with zero remaining systemic false positives; coverage is exactly 80 rows; the final ZIP and PDF are valid with current-run provenance; score/coverage/confidence are deterministic (recomputed from the replay with the final HEAD); the secret scan is clean; the full regression and GitHub CI are green; and the working tree is clean. No rule was downgraded and no provider evidence was fabricated to reach this result.
+
+**PR #1 remains Draft and must NOT be merged by automation or by any agent.** The merge itself is the user's decision. Remaining external live validations (GSC, Semrush, GA4, server logs, WordPress, rendered DOM, availability) still require user-supplied credentials or inputs and are runtime inputs, not merge blockers.
