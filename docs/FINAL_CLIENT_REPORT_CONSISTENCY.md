@@ -42,4 +42,20 @@
 - `Technical_Appendix\03_artifact-manifest.json`: `50c6d32d6de57995422f998d98c4e1a2812038e973526e3e6bd41f16e896cc85`
 - `Technical_Appendix\04_INTERNAL_VALIDATION.md`: `2623ee44b5a72b88c6756fdda720cef578bc3cf1904df697750403c4a6451cf5`
 
-All checks PASS — PDF/MD/CSV/XLSX/ZIP report the same post-correction run.
+All checks PASS ? CSV/XLSX/ZIP report the same post-correction run.
+
+## FINAL WORD DELIVERY (DOCX)
+
+| Check | Value | Result |
+|---|---|---|
+| Primary format | DOCX (`01_80_Item_Master_SEO_Diagnostic_Report.docx`) | PASS |
+| PDF in client ZIP | None (PDF is optional `REPORT_FORMAT=pdf` internal export only) | PASS |
+| DOCX render (LibreOffice 25.2 headless) | 70 pages, 3 landscape summary pages, 0 blank pages | PASS |
+| DOCX link annotations | 140, all real http(s) URLs; literal `<a href>` stays plain text | PASS |
+| Audit #01?#80 | 80 real Heading 2 paragraphs | PASS |
+| Summary table | 81 rows x 9 cols, real Word table, repeated header, landscape, portrait restored | PASS |
+| Word styles | Title/Subtitle/Heading 1-3/Normal/List Bullet real styles | PASS |
+| Manual review | 9 actions (8 core #53-57/#71-73 + #70 PARTIAL_MANUAL_VALIDATION) | PASS |
+| No engine metadata in client body | PASS |
+| DOCX regression tests | 10 passing (`tests/phase12/test_docx_report.py`) | PASS |
+| Full test suite | 832 passed / 0 failed | PASS |

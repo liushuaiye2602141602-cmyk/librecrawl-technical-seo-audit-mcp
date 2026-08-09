@@ -6,3 +6,5 @@ uvicorn>=0.30
 # PDF report pipeline (pdf_report.py): Markdown -> HTML -> PDF
 weasyprint>=62
 markdown>=3.6
+# Client DOCX report (audit_rules/docx_report.py) + DOCX regression tests
+python-docx>=1.1
