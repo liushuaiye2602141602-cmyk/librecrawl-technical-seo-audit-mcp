@@ -321,6 +321,22 @@ class TestAdapterDomainProtocol:
         assert len(findings) >= 1
         assert "https" in findings[0].finding_detail.lower()
 
+    def test_production_good_redirect_flags_do_not_create_critical_failure(
+            self, har_rule, sample_pages):
+        """Regression from production alt_redirects_properly=true evidence."""
+        from audit_rules.adapters import _adapter_domain_protocol
+        from audit_rules.context import SiteContext
+
+        site_ctx = SiteContext.from_site_check({
+            "https_redirect": {"http_redirects_to_https": True},
+            "www_redirect": {"alt_redirects_properly": True},
+        }, base_url="https://www.baolaipackaging.com/")
+
+        findings = _adapter_domain_protocol(
+            har_rule(6), site_ctx, sample_pages, {})
+
+        assert findings == []
+
 
 class TestAdapterCanonical:
     """Rule 8: canonical correctness."""

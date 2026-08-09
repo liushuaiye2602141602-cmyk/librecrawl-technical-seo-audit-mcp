@@ -418,7 +418,7 @@ class TestSiteContext:
         })
 
         assert ctx.https_redirects is True
-        assert ctx.www_redirects is True
+        assert ctx.www_redirects is False
 
     def test_from_site_check_defaults_for_empty_data(self):
         from audit_rules.context import SiteContext

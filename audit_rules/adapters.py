@@ -609,10 +609,10 @@ def _adapter_domain_protocol(
     if site_ctx.www_redirects:
         findings.append(_mk_finding(
             rule, url=site_ctx.base_url,
-            detected="www/non-www redirect detected",
-            expected="Single canonical domain (no dual resolution)",
-            evidence="www_redirect=True",
-            detail="www redirect is active — ensure only one canonical domain resolves",
+            detected="www/non-www redirect problem detected",
+            expected="Alternate host redirects to the single canonical domain",
+            evidence="www_redirect_problem=True",
+            detail="www/non-www redirect is missing or misconfigured",
         ))
     return findings
 

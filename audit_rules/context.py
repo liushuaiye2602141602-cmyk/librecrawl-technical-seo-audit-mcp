@@ -253,7 +253,9 @@ class SiteContext:
                 "redirects", https.get("http_redirects_to_https", False)
             ),
             www_redirects=www.get(
-                "redirects", www.get("alt_redirects_properly", False)
+                "redirects",
+                (not www["alt_redirects_properly"])
+                if "alt_redirects_properly" in www else False,
             ),
             _site_data=site_data,
         )
