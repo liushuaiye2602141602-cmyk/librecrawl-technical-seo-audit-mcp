@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 from dataclasses import asdict, dataclass, is_dataclass
 import gzip
 import json
@@ -76,12 +78,17 @@ _CREDENTIAL_QUERY_KEYS = frozenset({
     "awsaccesskeyid",
 })
 _TOKEN_VALUE_RE = re.compile(
-    r"(?i)(?:^|\s)bearer\s+(?:eyJ[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){2}|"
-    r"[A-Za-z0-9._~+/=-]{16,})(?=\s|$)|"
-    r"(?:^|\s)basic\s+[A-Za-z0-9+/]{16,}={0,2}(?=\s|$)|"
-    r"(?:^|[^A-Za-z0-9_])(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|"
+    r"(?i)(?:^|[^A-Za-z0-9_])(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|"
     r"AIza[0-9A-Za-z_-]{20,})|"
     r"(?:^|\s)eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"
+)
+_BASIC_AUTH_RE = re.compile(
+    r"(?<![A-Za-z0-9])basic\s+([A-Za-z0-9+/]+={0,2})(?![A-Za-z0-9+/=])",
+    flags=re.IGNORECASE,
+)
+_BEARER_AUTH_RE = re.compile(
+    r"(?<![A-Za-z0-9])bearer\s+([A-Za-z0-9._~+/\-]+={0,})(?![A-Za-z0-9._~+/=\-])",
+    flags=re.IGNORECASE,
 )
 
 _PROVIDER_DATA_FIELDS = {
@@ -180,7 +187,8 @@ def _string_contains_credential(value: str) -> bool:
     text = value.strip()
     if not text:
         return False
-    if _TOKEN_VALUE_RE.search(text) or "-----BEGIN PRIVATE KEY-----" in text:
+    if (_is_authorization_value(text) or _TOKEN_VALUE_RE.search(text)
+            or "-----BEGIN PRIVATE KEY-----" in text):
         return True
     link_targets = re.findall(r"<([^>]+)>", text)
     if any(_string_contains_credential(target) for target in link_targets):
@@ -202,6 +210,42 @@ def _string_contains_credential(value: str) -> bool:
         for component in (parsed.query, parsed.fragment)
         for key, _ in parse_qsl(component, keep_blank_values=True)
     )
+
+
+def _is_authorization_value(value: str) -> bool:
+    """Recognize Basic/Bearer values in text without matching ordinary prose."""
+    for basic_match in _BASIC_AUTH_RE.finditer(value):
+        token = basic_match.group(1)
+        padded_token = token + ("=" * (-len(token) % 4))
+        try:
+            decoded = base64.b64decode(padded_token, validate=True)
+        except (binascii.Error, ValueError):
+            continue
+        if b":" in decoded:
+            return True
+    for bearer_match in _BEARER_AUTH_RE.finditer(value):
+        token = bearer_match.group(1)
+        normalized_token = token.rstrip(".")
+        complete_value = (
+            bearer_match.start() == 0
+            and bearer_match.end() == len(value)
+            and token == normalized_token
+        )
+        explicit_header = re.search(
+            r'''["']?authorization["']?\s*:\s*["']?\s*$''',
+            value[:bearer_match.start()],
+            flags=re.IGNORECASE,
+        ) is not None
+        token_like = (
+            len(normalized_token) >= 15
+            or re.fullmatch(
+                r"[A-Za-z0-9_-]{2,}(?:\.[A-Za-z0-9_-]{2,})+",
+                normalized_token,
+            ) is not None
+        )
+        if complete_value or explicit_header or token_like:
+            return True
+    return False
 
 
 def _sanitize_json(value: Any) -> Any:

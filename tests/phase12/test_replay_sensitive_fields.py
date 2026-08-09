@@ -75,6 +75,17 @@ def test_replay_keeps_audit_headers_and_removes_credential_headers(tmp_path):
     {"callback": "/cb#access_token=real-token"},
     {"callback": "https://s3.example/x?X-Amz-Credential=AKIA123&X-Amz-Signature=abc"},
     {"callback": "https://example.com/x?sig=abc&expires=1"},
+    {"callback": "Basic dTpw"},
+    {"callback": "Basic dXNlcjpwYXNz"},
+    {"callback": "Bearer abcdefghijklmno"},
+    {"callback": "Bearer abc.def"},
+    {"callback": "Authorization: Basic dXNlcjpwYXNz"},
+    {"callback": "request failed: Bearer abc.def"},
+    {"callback": "token was Basic dTpw"},
+    {"callback": "prefix Bearer abcdefghijklmno"},
+    {"callback": 'request headers: Authorization: "Bearer abc"'},
+    {"callback": "Authorization: 'Bearer abc'"},
+    {"callback": '"Authorization": "Bearer abc"'},
 ])
 def test_validator_rejects_realistic_credential_shapes(contamination):
     from audit_rules.replay import ReplayValidationError, validate_replay_document
@@ -117,6 +128,37 @@ def test_normal_page_copy_with_basic_information_is_not_a_credential(tmp_path):
 
     result = write_replay_artifact(
         document, tmp_path / "basic.audit-replay-v1.json.gz",
+        expected_completed_pages=1)
+
+    assert result.valid is True
+
+
+@pytest.mark.parametrize("description", [
+    "This article explains bearer bonds and their risks.",
+    "Bearer authentication is described in this guide.",
+    "This article discusses bearer bonds.",
+    "Bearer authentication.",
+    "This guide explains bearer token-based authentication.",
+    "The term bearer token/auth scheme appears here.",
+])
+def test_normal_page_copy_with_bearer_prose_is_not_a_credential(
+        tmp_path, description):
+    from audit_rules.replay import build_replay_document, write_replay_artifact
+
+    document = build_replay_document(
+        source_url="https://example.com/", git_head="a" * 40,
+        generated_at="2026-08-09T07:00:00Z",
+        crawl_metadata={"crawl_parameters": {}, "truncation_status": "NOT_TRUNCATED"},
+        pages=[{
+            "url": "https://example.com/", "status_code": 200,
+            "meta_description": description,
+        }], links=[], site_data={}, sitemap_reconciliation={},
+        crawl_completeness={"pages_crawled": 1, "audit_complete": True},
+        provider_evidence={},
+    )
+
+    result = write_replay_artifact(
+        document, tmp_path / "bearer.audit-replay-v1.json.gz",
         expected_completed_pages=1)
 
     assert result.valid is True
