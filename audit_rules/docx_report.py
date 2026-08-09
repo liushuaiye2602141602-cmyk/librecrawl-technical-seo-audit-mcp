@@ -11,6 +11,7 @@ no content locking.
 from __future__ import annotations
 
 import re
+from dataclasses import asdict, is_dataclass
 from typing import Optional
 
 from docx import Document
@@ -295,6 +296,155 @@ def _summary_table(doc, rows: list[list[str]]) -> None:
             tc_pr.append(shd)
 
 
+_EVIDENCE_LABELS = {
+    "meta_generator": "Meta generator",
+    "script_src": "Script source",
+    "stylesheet_href": "Stylesheet",
+    "response_header": "Response header",
+    "asset_path": "Asset path",
+    "url_pattern": "URL pattern",
+    "analytics_fingerprint": "Analytics fingerprint",
+    "json_ld_type": "JSON-LD type",
+    "robots_meta": "Robots meta",
+    "cookie_name": "Cookie",
+}
+_SENSITIVE_MARKERS = (
+    "authorization", "bearer ", "basic ", "set-cookie", "cookie:",
+    "secret", "token=", "api-key", "apikey", "x-api-key",
+    "-----begin", "password", "credential",
+)
+
+
+def _client_safe_evidence_value(value: str) -> bool:
+    """Reject credential-looking strings before they reach client prose."""
+    lowered = str(value).strip().lower()
+    return not any(marker in lowered for marker in _SENSITIVE_MARKERS)
+
+
+def _client_evidence_lines(detection: dict) -> list[str]:
+    """Human-readable evidence: label + value + page, never raw structures."""
+    lines: list[str] = []
+    sources = detection.get("detection_sources") or []
+    for item in sources[:3]:
+        if is_dataclass(item):
+            item = asdict(item)
+        if not isinstance(item, dict):
+            continue
+        signal_type = str(item.get("signal_type") or "evidence")
+        signal_value = str(item.get("signal_value") or "").strip()
+        if not signal_value or not _client_safe_evidence_value(signal_value):
+            continue
+        label = _EVIDENCE_LABELS.get(signal_type, signal_type)
+        page = str(item.get("source_url") or "").strip()
+        line = f"{label}: {signal_value}"
+        if page:
+            line += f" ({page})"
+        lines.append(line)
+    if len(sources) > 3:
+        lines.append(f"+{len(sources) - 3} more evidence signals "
+                     "(full list in 09_Technology_Profile.json)")
+    return lines
+
+
+def website_technology_profile(
+    doc: Document,
+    profile: dict | None,
+    risks: list[dict] | None,
+) -> None:
+    """Insert Website Technology Profile and Technology Risks sections."""
+    profile = profile or {}
+    risks = risks or []
+
+    _add_bookmark(_heading(doc, "Website Technology Profile", level=1),
+                  "TechnologyProfile")
+    detections = [
+        item for item in (profile.get("detections") or [])
+        if isinstance(item, dict)
+        and item.get("status") in ("DETECTED", "CONFLICTING")
+    ]
+    if not detections:
+        doc.add_paragraph(
+            "No technologies were confirmed from the available observable "
+            "evidence. This does not prove a technology is absent.")
+    else:
+        tech_table = doc.add_table(rows=1, cols=5)
+        tech_table.style = "Table Grid"
+        for index, header in enumerate((
+                "Category", "Technology", "Version", "Confidence", "Evidence")):
+            cell = tech_table.rows[0].cells[index]
+            cell.text = ""
+            run = cell.paragraphs[0].add_run(header)
+            run.bold = True
+            run.font.color.rgb = WHITE
+            run.font.size = Pt(9)
+            _set_cell_shading(cell, "0B3D6F")
+        _mark_header_row(tech_table.rows[0])
+        for detection in detections:
+            cells = tech_table.add_row().cells
+            values = [
+                detection.get("category", ""),
+                detection.get("technology_name", ""),
+                detection.get("version", "Unknown"),
+                detection.get("confidence", "Low"),
+                " / ".join(_client_evidence_lines(detection)),
+            ]
+            for index, value in enumerate(values):
+                cells[index].text = ""
+                _add_url_text(cells[index].paragraphs[0], str(value))
+                for run in cells[index].paragraphs[0].runs:
+                    run.font.size = Pt(9)
+        status = profile.get("detection_status") or "COMPLETE"
+        if status != "COMPLETE":
+            p = doc.add_paragraph()
+            p.add_run(f"Detection status: {status}. ")
+            reason = profile.get("detection_reason") or ""
+            if reason:
+                p.add_run(str(reason))
+
+    _add_bookmark(
+        _heading(doc, "Technology Risks & Recommendations", level=1),
+        "TechnologyRisks")
+    if not risks:
+        doc.add_paragraph(
+            "No confirmed technology-specific risks were detected from the "
+            "available observable evidence.")
+    else:
+        risk_table = doc.add_table(rows=1, cols=5)
+        risk_table.style = "Table Grid"
+        for index, header in enumerate((
+                "Technology", "Observation / Confirmed Risk", "Mapped Audit",
+                "Impact", "Recommended Action")):
+            cell = risk_table.rows[0].cells[index]
+            cell.text = ""
+            run = cell.paragraphs[0].add_run(header)
+            run.bold = True
+            run.font.color.rgb = WHITE
+            run.font.size = Pt(9)
+            _set_cell_shading(cell, "0B3D6F")
+        _mark_header_row(risk_table.rows[0])
+        for risk in risks:
+            cells = risk_table.add_row().cells
+            mapped = ", ".join(
+                f"#{int(audit_id)}"
+                for audit_id in (risk.get("mapped_audit_ids") or []))
+            observation = (
+                f"{risk.get('observation_status', 'UNKNOWN')} "
+                f"(confidence {risk.get('observation_confidence', 'Low')})"
+            )
+            values = [
+                risk.get("technology", ""),
+                observation,
+                mapped,
+                risk.get("impact", ""),
+                risk.get("recommended_action", ""),
+            ]
+            for index, value in enumerate(values):
+                cells[index].text = ""
+                _add_url_text(cells[index].paragraphs[0], str(value))
+                for run in cells[index].paragraphs[0].runs:
+                    run.font.size = Pt(9)
+
+
 def _static_toc(doc, entries: list[tuple[str, str]]) -> None:
     _heading(doc, "Table of Contents", level=1)
     for label, bookmark in entries:
@@ -328,6 +478,8 @@ def build_docx(
     execution_counts: dict,
     manual_rows: list[dict],
     schema_distribution: dict,
+    technology_profile: dict | None = None,
+    technology_risks: list[dict] | None = None,
     domain: str = "https://www.baolaipackaging.com/",
     audit_date: str = "2026-08-09",
 ) -> str:
@@ -428,6 +580,8 @@ def build_docx(
     _static_toc(doc, [
         ("Management Summary", "ManagementSummary"),
         ("Executive Summary", "ExecutiveSummary"),
+        ("Website Technology Profile", "TechnologyProfile"),
+        ("Technology Risks & Recommendations", "TechnologyRisks"),
         ("80-Item Diagnostic Summary", "SummaryTable"),
         ("Full 80-Item Diagnosis", "FullDiagnosis"),
         ("30-Day Remediation Roadmap", "Roadmap"),
@@ -468,6 +622,8 @@ def build_docx(
     doc.add_paragraph(
         "健康领域：robots、状态码、canonical、重定向、sitemap、内部死链、"
         "Schema（Organization/BreadcrumbList 等真实分布）、安全头均 PASS。")
+    # ---------- Website Technology Profile + Risks (portrait) ----------
+    website_technology_profile(doc, technology_profile, technology_risks)
     # ---------- Summary table (landscape) ----------
     landscape = _new_landscape_section(doc)
     _header_footer(landscape, "Baolai Packaging")
