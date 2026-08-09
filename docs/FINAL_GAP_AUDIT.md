@@ -1,7 +1,7 @@
 # Final Repository Gap Audit
 
 **Audit date:** 2026-08-09  
-**Certified implementation code HEAD:** `4095f29`
+**Certified implementation code HEAD:** `4095f29` (final verification rerun at `02e5e81`)
 **Method:** repository-wide source/document scan, registry introspection, provider/adapter registration inspection, artifact wiring inspection, security/network scan, test suite, benchmark, and independent code review.
 
 ## Result
@@ -66,7 +66,7 @@ Each subsystem is implemented, mocked, configured, documented, fail-closed, and 
 - Classifications: 18 `EXISTING_FULL`, 54 `EXISTING_PARTIAL`, 8 `NEW_MANUAL`, 0 `NEW_AUTO`, 0 `NEW_EXTERNAL_DATA`.
 - Adapters: 72 for all non-manual rules.
 - Registered audit providers: 9 plus foundational LibreCrawl.
-- Full suite at certification checkpoint: 685 passed, 0 failed, 0 skipped.
+- Full suite at certification checkpoint: 685 passed, 0 failed, 0 skipped. Final verification rerun at `02e5e81`: 771 passed, 0 failed, 0 skipped.
 - Benchmark: 100 pages 0.083 s / 0.44 MiB; 1,000 pages 0.759 s / 3.80 MiB; 5,000 pages 3.900 s / 18.67 MiB.
 
-The final verification reruns these checks after documentation certification and records the fresh result in `docs/FINAL_IMPLEMENTATION_REPORT.md`.
+The final verification rerun after documentation certification is recorded in `docs/FINAL_IMPLEMENTATION_REPORT.md`; the post-certification fixes (Rule 1 robots evidence contract, replay credential false positive, redirect-evidence normalization, artifact provenance) introduced no new in-scope gaps.

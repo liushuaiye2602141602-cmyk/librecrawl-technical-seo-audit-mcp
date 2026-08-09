@@ -1,12 +1,13 @@
 {
-  "generated_at": "2026-08-09T23:00:00+08:00",
+  "generated_at": "2026-08-09T18:31:33+08:00",
   "git_branch": "feat/master-audit-completion",
-  "git_head": "4095f29",
-  "git_commit_short": "4095f29",
+  "git_head": "02e5e81e5ef6b3e3c15d19fbef824c1e9358e21c",
+  "git_commit_short": "02e5e81",
+  "verification_note": "Final verification rerun after the Rule 1 evidence-contract, replay credential, redirect-evidence, and artifact-provenance closure commits. Full regression, server compile, registry/provider/adapter integrity, tracked-JSON validation, and Compose config are green; GitHub Actions Offline validation passed for this HEAD on both push and Draft PR #1.",
   "python": "3.14.5",
   "tests": {
-    "collected": 685,
-    "passed": 685,
+    "collected": 771,
+    "passed": 771,
     "failed": 0,
     "skipped": 0
   },

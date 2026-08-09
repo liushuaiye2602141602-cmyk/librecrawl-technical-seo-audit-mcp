@@ -283,7 +283,7 @@ PASS. Both push and Draft PR `Offline validation (Python 3.12)` checks are green
 - `f4fb12c` redirect evidence normalization
 - `acac52a` authorization-value validation hardening
 
-The final report commit must also pass the same two checks before handoff. PR #1 remains Draft.
+The final report commit `02e5e81` also passed both checks (push and Draft PR #1, completed 2026-08-09T08:14Z). PR #1 remains Draft.
 
 ## 22. Merge-gate evaluation
 
@@ -303,10 +303,22 @@ The final report commit must also pass the same two checks before handoff. PR #1
 - No fabricated provider evidence: PASS
 - Secret scan: PASS
 - Fresh full regression: PASS
-- GitHub CI: PASS before the final report commit
+- GitHub CI: PASS including the final report commit `02e5e81`
 
 The only honest final result is:
 
 `NOT_READY_TO_MERGE`
 
 Do not merge Draft PR #1. A future acceptance decision requires either a user-approved new acquisition run after the remaining robots evidence contract is resolved, or another authorized method that preserves the complete normalized input without revisiting the production site.
+
+## 23. Post-report verification addendum (2026-08-09)
+
+Recorded after the report above was committed:
+
+- The Rule 1 robots evidence contract is now resolved in code: `_parse_robots_txt` retains User-agent groups, bot-specific `Disallow` rules no longer flatten into a global block, and findings carry `applicable_agents`, blocked paths, robots status, expected value, data source, confidence, remediation, and acceptance criteria. Covered by `tests/phase12/test_rule1_evidence_contract.py` (committed in `02e5e81`).
+- The final report commit `02e5e81` passed both GitHub Actions `Offline validation (Python 3.12)` checks (push and Draft PR #1).
+- Fresh full regression at `02e5e81`: 771 passed, 0 failed, 0 skipped.
+- Server compile, 80-rule registry integrity, provider/adapter/tool integrity, tracked JSON parsing, and Compose config validation: PASS.
+- Secret/credential scan of tracked source and current-session report artifacts: PASS.
+
+The overall decision remains `NOT_READY_TO_MERGE` because the production artifact was generated at `beb8e31` and cannot be regenerated without either a new user-approved acquisition run or another authorized method that preserves the complete normalized input. The remaining external live validations (GSC, Semrush, GA4, server logs, WordPress, rendered DOM, availability) still require user-supplied credentials or inputs.

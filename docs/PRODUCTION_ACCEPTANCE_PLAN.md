@@ -13,7 +13,7 @@ Create one minimal workflow at `.github/workflows/ci.yml`, in its own commit. It
 The workflow must:
 
 - install `requirements.txt` and pytest;
-- run the complete suite with `python -m pytest tests/ -q`, with an expected baseline of 685 tests;
+- run the complete suite with `python -m pytest tests/ -q`, with an expected baseline of 771 tests;
 - compile the Python entry points and packages with `python -m compileall`;
 - run the 80-rule registry integrity tests and explicitly verify exact IDs 1 through 80;
 - parse every tracked JSON configuration/document file;
