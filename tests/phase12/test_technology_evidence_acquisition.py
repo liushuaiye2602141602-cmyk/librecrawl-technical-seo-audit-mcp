@@ -59,6 +59,27 @@ def test_set_cookie_values_are_not_persisted():
     assert headers.get("cf-cache-status") == "HIT"
 
 
+def test_cookie_values_not_persisted():
+    from audit_rules.context import PageContext
+    from audit_rules.technology.detector import LocalTechnologyDetector
+    ctx = PageContext.from_export(_page_dict(
+        response_headers={
+            "Cookie": "session=abc123; theme=dark",
+            "Set-Cookie": "PHPSESSID=abc123; path=/",
+            "Server": "nginx",
+        }))
+    headers = ctx.allowlisted_headers or {}
+    assert "cookie" not in headers
+    assert "set-cookie" not in headers
+    # The detector records cookie names only, never values.
+    corpus = LocalTechnologyDetector._build_corpus(ctx)
+    assert corpus["cookie_name"] == []
+    joined = " ".join(
+        str(value) for values in corpus.values() for value in values)
+    assert "abc123" not in joined
+    assert "session=" not in joined
+
+
 def test_source_html_scripts_are_detected_without_rendered_dom():
     from audit_rules.context import PageContext
     ctx = PageContext.from_export(_page_dict(
