@@ -54,14 +54,20 @@ def _mk(
     detail: str,
     severity: Severity,
     confidence: float = 1.0,
+    priority: Optional[str] = None,
 ) -> Finding:
-    """Factory for Finding with rule-derived defaults and explicit severity."""
+    """Factory for Finding with rule-derived defaults and explicit severity.
+
+    ``priority`` overrides the rule-level priority for this specific finding
+    (rule importance != finding priority; lab-only evidence should not inherit
+    a Critical rule priority automatically).
+    """
     return Finding(
         audit_id=rule.audit_id,
         rule_id=rule.rule_id,
         url=url,
         category=rule.category.value,
-        priority=str(rule.priority.value),
+        priority=priority or str(rule.priority.value),
         severity=str(severity.value),
         finding_type=rule.default_finding_type,
         scope=str(rule.scope.value),
@@ -142,6 +148,7 @@ def check_core_web_vitals(
                     ),
                     severity=Severity.INFO,
                     confidence=0.5,
+                    priority="High",  # data gap on the page; retest, not a defect
                 ))
             continue
 
@@ -297,6 +304,7 @@ def check_core_web_vitals(
                 detail=f"{detail_prefix}Lab diagnostics: {lab_str}",
                 severity=severity,
                 confidence=0.5,
+                priority="Medium",  # lab-only evidence is not a P0 page defect
             ))
 
     return findings
@@ -864,6 +872,10 @@ def check_font_cls(
 
         # ── Overall CLS check ──
         if snap.lab_cls is not None and snap.lab_cls > CLS_THRESHOLD.poor:
+            # High CLS without any font-related evidence must not be attributed
+            # to font loading; it belongs to Rule 19/24 layout-stability checks.
+            if font_shift_count == 0 and not font_issues:
+                continue
             findings.append(_mk(
                 rule, url=url,
                 detected=(

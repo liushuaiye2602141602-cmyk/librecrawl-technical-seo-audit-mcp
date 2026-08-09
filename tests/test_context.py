@@ -168,7 +168,10 @@ class TestPageContextLightweight:
         from audit_rules.context import PageContext
         page = {"url": "https://example.com", "json_ld": "malformed"}
         ctx = PageContext.from_export(page)
-        assert ctx.json_ld_types == ["parse_error"]
+        # Malformed JSON-LD yields no extractable types (not a fake
+        # "parse_error" type); schema rules then treat it as no usable
+        # structured data rather than a false PASS.
+        assert ctx.json_ld_types == []
 
     def test_from_export_json_ld_none(self):
         from audit_rules.context import PageContext

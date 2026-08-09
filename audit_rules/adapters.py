@@ -31,6 +31,8 @@ Usage:
 
 from typing import Optional, Callable
 import json
+import re
+from collections import defaultdict
 from dataclasses import dataclass, field
 
 from audit_rules.models import RuleDefinition, Finding
@@ -481,7 +483,7 @@ class CompatibilityHarness:
 
 def _mk_finding(rule: RuleDefinition, url: str = "", detected: str = "",
                 expected: str = "", evidence: str = "", detail: str = "",
-                confidence: float = 1.0) -> Finding:
+                confidence: float = 1.0, severity: str | None = None) -> Finding:
     """Factory for Finding with rule-derived defaults."""
     return Finding(
         audit_id=rule.audit_id,
@@ -489,7 +491,7 @@ def _mk_finding(rule: RuleDefinition, url: str = "", detected: str = "",
         url=url,
         category=rule.category.value,
         priority=str(rule.priority.value),
-        severity=str(rule.severity.value),
+        severity=severity or str(rule.severity.value),
         finding_type=rule.default_finding_type,
         scope=str(rule.scope.value),
         detected_value=detected,
@@ -902,25 +904,160 @@ def _adapter_hreflang_basics(
     rule: RuleDefinition, site_ctx: SiteContext,
     page_contexts: list[PageContext], data: dict,
 ) -> list[Finding]:
-    """Rule 29: hreflang basics."""
+    """Rule 29: hreflang basics (structural contract).
+
+    Evaluated per page that declares hreflang:
+      B. valid language codes             -> Warning
+      C. target URL validity              -> Warning
+      E. target indexability (noindex)    -> Warning
+      F. return-link reciprocity          -> Warning
+      G. self-reference presence          -> Opportunity
+      H. duplicate/conflicting lang value -> Warning
+      I. x-default                        -> Opportunity (never a hard FAIL)
+
+    Target status/indexability at Error level remain in Rule 58; Rule 29
+    records only the structural observations not covered elsewhere.
+    """
     findings = []
     pages_with_hreflang = sum(1 for p in page_contexts if p.hreflang_summary)
     if pages_with_hreflang == 0:
         # No hreflang on a single-lang site is fine — no finding
         return findings
 
+    page_by_url = {
+        (ctx.url or "").rstrip("/").lower(): ctx for ctx in page_contexts
+    }
+    lang_pattern = re.compile(r"^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$")
+
     for ctx in page_contexts:
         if not ctx.hreflang_summary:
             continue
-        langs = [h["lang"] for h in ctx.hreflang_summary if h.get("lang")]
+
+        url_key = (ctx.url or "").rstrip("/").lower()
+        entries = []
+        for entry in ctx.hreflang_summary:
+            if not isinstance(entry, dict):
+                continue
+            lang = str(entry.get("lang") or "").strip().lower()
+            target = str(entry.get("url") or "").strip()
+            if lang and target:
+                entries.append({"lang": lang, "target": target})
+
+        langs = [entry["lang"] for entry in entries]
+        lang_targets: dict[str, list[str]] = defaultdict(list)
+        for entry in entries:
+            lang_targets[entry["lang"]].append(entry["target"])
+
+        # I. x-default missing -> Opportunity (never a standalone FAIL)
         if "x-default" not in langs:
             findings.append(_mk_finding(
                 rule, url=ctx.url,
                 detected="Missing x-default hreflang",
                 expected="x-default hreflang annotation present",
                 evidence=f"langs={langs}",
-                detail=f"Page has hreflang but missing x-default: {ctx.url}",
+                detail=(
+                    f"Page has hreflang but missing x-default: {ctx.url}. "
+                    f"x-default routes non-matching locales; its absence is an "
+                    f"optimization opportunity, not a confirmed indexability failure."
+                ),
+                confidence=0.7,
+                severity="Opportunity",
             ))
+
+        # B. invalid language code format
+        for lang in langs:
+            if lang != "x-default" and not lang_pattern.match(lang):
+                findings.append(_mk_finding(
+                    rule, url=ctx.url,
+                    detected=f"Invalid hreflang language code: {lang}",
+                    expected="BCP-47 language tag (e.g. en, de-DE)",
+                    evidence=f"lang={lang!r}",
+                    detail=f"hreflang on {ctx.url} uses invalid language code {lang!r}",
+                    confidence=0.9,
+                    severity="Warning",
+                ))
+
+        # C. target URL validity
+        for entry in entries:
+            target = entry["target"]
+            if not re.match(r"^https?://", target):
+                findings.append(_mk_finding(
+                    rule, url=ctx.url,
+                    detected=f"Invalid hreflang target URL: {target}",
+                    expected="Absolute http(s) URL",
+                    evidence=f"target={target!r}",
+                    detail=f"hreflang on {ctx.url} points to invalid target {target!r}",
+                    confidence=0.9,
+                    severity="Warning",
+                ))
+
+        # E. target indexability (Warning level; Rule 58 owns Error level)
+        for entry in entries:
+            target_ctx = page_by_url.get(entry["target"].rstrip("/").lower())
+            if target_ctx is not None and "noindex" in (target_ctx.robots or "").lower():
+                findings.append(_mk_finding(
+                    rule, url=ctx.url,
+                    detected=f"hreflang target is noindex: {entry['target']}",
+                    expected="All hreflang targets are indexable",
+                    evidence=f"hreflang_target_noindex={entry['target']}",
+                    detail=f"hreflang on {ctx.url} points to noindex page {entry['target']}",
+                    confidence=0.85,
+                    severity="Warning",
+                ))
+
+        # F. return-link reciprocity
+        for entry in entries:
+            target_ctx = page_by_url.get(entry["target"].rstrip("/").lower())
+            if target_ctx is None or not target_ctx.hreflang_summary:
+                continue
+            target_urls = {
+                str(item.get("url") or "").rstrip("/").lower()
+                for item in target_ctx.hreflang_summary
+                if isinstance(item, dict)
+            }
+            if url_key not in target_urls:
+                findings.append(_mk_finding(
+                    rule, url=ctx.url,
+                    detected=f"Missing reciprocal hreflang return link from {entry['target']}",
+                    expected="hreflang targets link back to this page",
+                    evidence=f"target={entry['target']}; missing_return_to={ctx.url}",
+                    detail=(
+                        f"hreflang on {ctx.url} points to {entry['target']} but that "
+                        f"page does not include a reciprocal hreflang entry back."
+                    ),
+                    confidence=0.8,
+                    severity="Warning",
+                ))
+
+        # G. self-reference presence
+        if url_key not in {
+            entry["target"].rstrip("/").lower() for entry in entries
+        }:
+            findings.append(_mk_finding(
+                rule, url=ctx.url,
+                detected="Missing self-referencing hreflang entry",
+                expected="Page declares its own URL+language in the hreflang set",
+                evidence=f"self_reference_absent=True; langs={langs}",
+                detail=f"Page {ctx.url} does not self-reference in its hreflang set",
+                confidence=0.7,
+                severity="Opportunity",
+            ))
+
+        # H. duplicate/conflicting language values
+        for lang, targets in lang_targets.items():
+            if len(set(targets)) > 1:
+                findings.append(_mk_finding(
+                    rule, url=ctx.url,
+                    detected=f"Conflicting hreflang values for language {lang}",
+                    expected="One target URL per language code",
+                    evidence=f"lang={lang}; targets={targets}",
+                    detail=(
+                        f"hreflang on {ctx.url} declares language {lang} with "
+                        f"multiple conflicting targets: {targets}"
+                    ),
+                    confidence=0.85,
+                    severity="Warning",
+                ))
 
     return findings
 
@@ -997,18 +1134,31 @@ def _adapter_orphan_pages(
     rule: RuleDefinition, site_ctx: SiteContext,
     page_contexts: list[PageContext], data: dict,
 ) -> list[Finding]:
-    """Rule 45: orphan pages."""
+    """Rule 45: orphan candidates (zero HTML inbound links).
+
+    A page with zero inbound internal links is an ORPHAN_CANDIDATE even when
+    it is discovered via sitemap: sitemap discovery is not an internal link.
+    Severity is WARNING (candidate), not a hard failure; Rule 11 owns the
+    Error-level internal-link-distribution defect.
+    """
     findings = []
     for ctx in page_contexts:
         if ctx.status_code != 200:
             continue
-        if ctx.linked_from_count == 0 and ctx.internal_links_count == 0:
+        if ctx.linked_from_count == 0:
             findings.append(_mk_finding(
                 rule, url=ctx.url,
-                detected="Page has zero inbound and zero outbound internal links",
-                expected="Every page has ≥1 inbound internal link",
+                detected="Zero inbound internal links (orphan candidate)",
+                expected="Every page has at least one inbound internal link",
                 evidence=f"linked_from={ctx.linked_from_count}, internal_links={ctx.internal_links_count}",
-                detail=f"Orphan page: {ctx.url} has no internal link connections",
+                detail=(
+                    f"Orphan candidate: {ctx.url} has zero inbound internal "
+                    f"links in the crawl HTML link graph. Sitemap membership "
+                    f"is not an internal link. Verify reachability from "
+                    f"category/home pages."
+                ),
+                confidence=0.7,
+                severity="Warning",
             ))
     return findings
 

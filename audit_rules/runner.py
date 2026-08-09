@@ -27,6 +27,11 @@ from audit_rules.providers.pagespeed_provider import (
 )
 
 
+# Rules whose required evidence is the bounded PageSpeed sample: evaluating N
+# sampled URLs is partial execution, never full-site coverage.
+_PSI_SAMPLED_RULES = {19, 21, 24, 61, 62, 63}
+
+
 @dataclass
 class RuleRunner:
     """Orchestrates rule evaluation: data → adapters → findings → coverage.
@@ -157,6 +162,33 @@ class RuleRunner:
         for pctx in page_contexts:
             pctx.release_heavy()
 
+        # Step 5b: PSI-backed rules were evaluated on a bounded sample, not on
+        # every eligible page. Mark them as partial execution and report the
+        # sampled count as the evaluated count (sample != full coverage).
+        psi_sampled = existing_data.get("psi_sampled") or []
+        eligible_pages = sum(1 for p in page_contexts if p.status_code == 200)
+        evaluated_overrides: dict[int, int] = {}
+        if psi_sampled and eligible_pages and len(psi_sampled) < eligible_pages:
+            psi_success = sum(
+                1 for ctx, _reason in psi_sampled
+                if getattr(
+                    (existing_data.get("_psi_cache") or {}).get(
+                        (ctx.url.rstrip("/").lower(),
+                         existing_data.get("psi_strategy", "mobile"))
+                    ),
+                    "psi_status",
+                    "",
+                ) == "success"
+            )
+            for audit_id in _PSI_SAMPLED_RULES:
+                self.harness.partially_completed_rule_ids.add(audit_id)
+                self.harness.not_checked_reasons[audit_id] = (
+                    f"PSI sampled {len(psi_sampled)} of {eligible_pages} "
+                    f"eligible pages ({psi_success} successful); sampled "
+                    f"evidence is partial execution"
+                )
+                evaluated_overrides[audit_id] = len(psi_sampled)
+
         # Step 6: Compute coverage matrix
         mgr = CoverageManager(self.registry)
         coverage_rows = mgr.compute(
@@ -166,6 +198,7 @@ class RuleRunner:
             partially_executed_rule_ids=self.harness.partially_completed_rule_ids,
             not_checked_reasons=self.harness.not_checked_reasons,
             manual_outcomes=manual_outcomes,
+            evaluated_overrides=evaluated_overrides,
         )
 
         self.last_shared_data = dict(existing_data)

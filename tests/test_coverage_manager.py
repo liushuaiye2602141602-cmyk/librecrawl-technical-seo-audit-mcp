@@ -635,5 +635,8 @@ class TestProductionCoverage:
 
         assert executed >= 18, f"At least 18 EXISTING_FULL should execute, got {executed}"
         assert not_checked >= 12, f"At least 12 manual/external should be NOT_CHECKED, got {not_checked}"
-        assert not_applicable == 10, f"10 WP rules should be NOT_APPLICABLE, got {not_applicable}"
+        assert not_applicable == 12, (
+            f"10 WP rules + 2 schema-empty rules (#28/#78) should be "
+            f"NOT_APPLICABLE, got {not_applicable}"
+        )
         assert executed + not_checked + not_applicable == 80

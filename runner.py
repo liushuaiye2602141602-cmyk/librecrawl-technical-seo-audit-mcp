@@ -922,6 +922,10 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
                         registry=runner_obj.registry,
                         domain=domain,
                         timestamp=timestamp,
+                        excluded_audit_ids={
+                            row.audit_id for row in coverage_rows
+                            if row.execution_status.value == "NOT_APPLICABLE"
+                        },
                     )
                     if task_csv:
                         task_path = REPORTS_DIR / f"{domain}-{timestamp}.master-audit-tasks.csv"

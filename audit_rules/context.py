@@ -12,8 +12,46 @@ Phase 1 (Requirement 7):
   - If data is not in the export, it stays None → NOT_CHECKED.
 """
 
+import json as _json
 from dataclasses import dataclass, field
 from typing import Optional, Any
+
+
+def _extract_json_ld_types(value: Any) -> list[str]:
+    """Collect @type values from raw JSON-LD of any nesting shape.
+
+    Handles the common export shapes: a dict, a list of dicts, nested lists,
+    and JSON strings containing JSON-LD. Unknown/empty payloads yield [].
+    """
+    types: list[str] = []
+
+    def visit(node: Any) -> None:
+        if isinstance(node, str):
+            stripped = node.strip()
+            if not stripped:
+                return
+            try:
+                parsed = _json.loads(stripped)
+            except (ValueError, TypeError):
+                return
+            visit(parsed)
+            return
+        if isinstance(node, dict):
+            node_type = node.get("@type")
+            if isinstance(node_type, str):
+                types.append(node_type)
+            elif isinstance(node_type, list):
+                types.extend(t for t in node_type if isinstance(t, str))
+            graph = node.get("@graph")
+            if isinstance(graph, list):
+                visit(graph)
+            return
+        if isinstance(node, list):
+            for item in node:
+                visit(item)
+
+    visit(value)
+    return list(dict.fromkeys(types))
 
 
 @dataclass
@@ -147,16 +185,7 @@ class PageContext:
         ] if isinstance(hreflang, list) else []
 
         json_ld = page_dict.get("json_ld") or page_dict.get("structured_data") or []
-        if isinstance(json_ld, str):
-            json_ld_types = ["parse_error"]
-        elif isinstance(json_ld, list):
-            json_ld_types = []
-            for item in json_ld:
-                if isinstance(item, dict):
-                    t = item.get("@type", "Unknown")
-                    json_ld_types.append(t)
-        else:
-            json_ld_types = []
+        json_ld_types = _extract_json_ld_types(json_ld)
 
         links = page_dict.get("links_detailed") or []
         if links:

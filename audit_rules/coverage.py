@@ -23,6 +23,28 @@ from audit_rules.categories import (
 from audit_rules.context import SiteContext, PageContext
 
 
+# Rules that own a crawl-layer component which can be executed without the
+# external GSC layer: the crawl layer result is retained as EXECUTED_PARTIAL
+# rather than throwing away already-detected evidence.
+_CRAWL_LAYER_PARTIAL_RULES = {2, 16}
+
+
+def _crawl_layer_evidence_available(
+    rule: RuleDefinition,
+    site_ctx: SiteContext,
+    page_contexts: list[PageContext],
+) -> bool:
+    """True when the crawl-layer input for the rule actually exists."""
+    if rule.audit_id == 2:
+        return bool(site_ctx.sitemap_found)
+    if rule.audit_id == 16:
+        return any(
+            getattr(ctx, "word_count", None) is not None
+            for ctx in page_contexts
+        )
+    return False
+
+
 @dataclass
 class CoverageManager:
     """Produces exactly 80 CoverageRow entries from registry + contexts + findings.
@@ -46,6 +68,7 @@ class CoverageManager:
         partially_executed_rule_ids: set[int] | None = None,
         not_checked_reasons: dict[int, str] | None = None,
         manual_outcomes: dict | None = None,
+        evaluated_overrides: dict[int, int] | None = None,
     ) -> list[CoverageRow]:
         """Compute 80 CoverageRow entries from registry + contexts + findings.
 
@@ -83,7 +106,10 @@ class CoverageManager:
 
             # Count eligible pages
             eligible = self._count_eligible(rule, site_ctx, page_contexts)
-            evaluated = self._count_evaluated(rule, exec_status, rule_findings, eligible)
+            evaluated = self._count_evaluated(
+                rule, exec_status, rule_findings, eligible,
+                (evaluated_overrides or {}).get(rule.audit_id),
+            )
 
             coverage_pct = 0.0
             if eligible > 0:
@@ -133,7 +159,8 @@ class CoverageManager:
             (execution_status, result_status, not_checked_reason)
         """
         # Case E: Not applicable — e.g. WordPress rule on generic site
-        not_applicable_reason = self._check_applicability(rule, site_ctx)
+        not_applicable_reason = self._check_applicability(
+            rule, site_ctx, page_contexts)
         if not_applicable_reason:
             return ExecutionStatus.NOT_APPLICABLE, ResultStatus.UNKNOWN, not_applicable_reason
 
@@ -178,6 +205,15 @@ class CoverageManager:
                     self._derive_result_from_findings(findings),
                     reason,
                 )
+            if (adapter_completed
+                    and rule.audit_id in _CRAWL_LAYER_PARTIAL_RULES
+                    and _crawl_layer_evidence_available(rule, site_ctx,
+                                                        page_contexts)):
+                return (
+                    ExecutionStatus.EXECUTED_PARTIAL,
+                    ResultStatus.PASS,
+                    reason,
+                )
             return (
                 ExecutionStatus.NOT_CHECKED,
                 ResultStatus.UNKNOWN,
@@ -216,6 +252,29 @@ class CoverageManager:
         # Has findings → determine result from findings
         result = self._derive_result_from_findings(findings)
 
+        # Rule 70: crawl export lacks form HTML; Info-only findings are a
+        # coverage-gap note, not a full accessibility PASS.
+        if rule.audit_id == 70 and all(
+                str(f.severity) == "Info" for f in findings):
+            return (
+                ExecutionStatus.EXECUTED_PARTIAL,
+                ResultStatus.UNKNOWN,
+                "Crawl export lacks form HTML; full accessibility check "
+                "requires rendered DOM (MANUAL_REVIEW_REQUIRED)",
+            )
+
+        # Rule 19: lab-only evidence (field_scope=NONE) can never confirm a
+        # field-data CWV PASS.
+        if (rule.audit_id == 19 and result == ResultStatus.PASS
+                and all("field_scope=NONE" in (f.evidence or "")
+                        for f in findings)):
+            return (
+                ExecutionStatus.EXECUTED_PARTIAL,
+                ResultStatus.UNKNOWN,
+                "No CrUX field data; lab-only evidence cannot confirm "
+                "field CWV PASS",
+            )
+
         # Findings are failures, not an execution trace.  A completed adapter
         # evaluated every eligible entity unless it explicitly reported partial
         # execution through partially_executed_rule_ids.
@@ -225,8 +284,29 @@ class CoverageManager:
         )
         return exec_status, result, partial_reason
 
-    def _check_applicability(self, rule: RuleDefinition, site_ctx: SiteContext) -> str:
+    def _check_applicability(
+        self,
+        rule: RuleDefinition,
+        site_ctx: SiteContext,
+        page_contexts: list[PageContext],
+    ) -> str:
         """Check if rule is applicable to this site. Returns reason if NOT_APPLICABLE."""
+        # Schema validation rules cannot run against an empty schema set:
+        # an empty set is NOT healthy — it is NOT_APPLICABLE (no schema to
+        # validate / compare).
+        if rule.audit_id in (28, 78):
+            has_schema = any(
+                getattr(ctx, "json_ld_types", None)
+                for ctx in page_contexts
+            )
+            if not has_schema:
+                label = (
+                    "NO_SCHEMA_TO_VALIDATE"
+                    if rule.audit_id == 28
+                    else "NO_SCHEMA_TO_COMPARE"
+                )
+                return f"Not applicable: {label} (no structured data detected)"
+
         # WordPress-specific rules on generic sites
         wp_rules = {36, 37, 38, 39, 64, 65, 66, 67, 68, 69}
         if rule.audit_id in wp_rules and site_ctx.site_profile != "wordpress":
@@ -290,12 +370,15 @@ class CoverageManager:
         exec_status: ExecutionStatus,
         findings: list[Finding],
         eligible_count: int,
+        override_count: int | None = None,
     ) -> int:
         """Count how many entities were actually evaluated."""
         if exec_status == ExecutionStatus.NOT_CHECKED:
             return 0
         if exec_status == ExecutionStatus.NOT_APPLICABLE:
             return 0
+        if override_count is not None:
+            return min(override_count, eligible_count)
 
         if exec_status == ExecutionStatus.EXECUTED_FULL:
             return eligible_count

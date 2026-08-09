@@ -53,6 +53,24 @@ TASK_CSV_COLUMNS = [
 ]
 
 
+def applicable_findings(
+    findings: list[Finding],
+    coverage_rows: list[CoverageRow],
+) -> list[Finding]:
+    """Return only findings whose rule is not NOT_APPLICABLE.
+
+    NOT_APPLICABLE rules may keep remote observations, but observations are
+    not remediation issues: they must never become tasks or roadmap items.
+    """
+    excluded = {
+        row.audit_id for row in coverage_rows
+        if row.execution_status.value == "NOT_APPLICABLE"
+    }
+    if not excluded:
+        return findings
+    return [f for f in findings if f.audit_id not in excluded]
+
+
 def _safe_cell(value: object) -> object:
     """Neutralize spreadsheet formulas while preserving ordinary values."""
     if not isinstance(value, str):
@@ -85,6 +103,7 @@ def generate_task_csv(
     registry: list[RuleDefinition],
     domain: str = "",
     timestamp: str = "",
+    excluded_audit_ids: set[int] | None = None,
 ) -> str:
     """Generate master-audit-tasks.csv as a string.
 
@@ -101,8 +120,11 @@ def generate_task_csv(
     # Build registry lookup
     rule_map: dict[str, RuleDefinition] = {r.rule_id: r for r in registry}
 
+    excluded = excluded_audit_ids or set()
     groups: dict[tuple, list[Finding]] = {}
     for finding in sorted(findings, key=_sort_key):
+        if finding.audit_id in excluded:
+            continue
         groups.setdefault(_group_key(finding), []).append(finding)
 
     output = io.StringIO()

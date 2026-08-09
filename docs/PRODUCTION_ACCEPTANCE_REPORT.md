@@ -366,3 +366,33 @@ The final authorized production crawl (session `b4d382c0a89f46f1`, upstream craw
 Every merge gate in section 25 passes: replay parity is proven with the accepted normalized input; Rule 1 and Rule 6 blockers are resolved; the 53 systemic false positives have one authoritative disposition with zero remaining systemic false positives; coverage is exactly 80 rows; the final ZIP and PDF are valid with current-run provenance; score/coverage/confidence are deterministic (recomputed from the replay with the final HEAD); the secret scan is clean; the full regression and GitHub CI are green; and the working tree is clean. No rule was downgraded and no provider evidence was fabricated to reach this result.
 
 **PR #1 remains Draft and must NOT be merged by automation or by any agent.** The merge itself is the user's decision. Remaining external live validations (GSC, Semrush, GA4, server logs, WordPress, rendered DOM, availability) still require user-supplied credentials or inputs and are runtime inputs, not merge blockers.
+
+## 25. DIAGNOSTIC QUALITY CORRECTION (2026-08-09)
+
+An evidence-first correction pass was applied to the 80-item diagnostics so
+that every Audit #1–#80 status is supported by real evidence, no missing data
+is presented as PASS, samples are never presented as full-site coverage, and
+no rule contradicts another. No features, rules, providers, or MCP surface
+were added; no live recrawl was performed (all fixes validated offline against
+the preserved replay + production-derived fixtures, TDD first).
+
+| Metric | Value |
+|---|---|
+| Rules reviewed | 80 |
+| Rules changed | 20 |
+| False positives removed | 3 finding-level (2 non-font CLS warnings in #63; 1 false schema-coverage opportunity in #27); 315 x-default FAIL findings reclassified as opportunities in #29 |
+| False PASS removed | 2 concrete (#45 orphan candidates now WARNING; #70 accessibility now PARTIAL/UNKNOWN) + vacuous-PASS guards added for #19/#28/#78 |
+| Execution-status corrections | 9 (#2/#16/#19/#21/#24/#61/#62/#63/#70 → EXECUTED_PARTIAL with sampled/crawl-layer counts) |
+| Priority corrections | #19 lab/timeout findings no longer auto-P0 (lab → P2, timeout data-gap → P1); corrected P0 count drops to 0 |
+| Score before | 88.27 / 100 |
+| Score after | 90.75 / 100 |
+| Coverage before | 61.43% (43/70) |
+| Coverage after | 64.29% (45/70) |
+| Key status changes | #29 FAIL→OPPORTUNITY (x-default); #45 PASS→WARNING (orphan candidates); #63 WARNING→PASS (font attribution); #27 OPPORTUNITY→PASS (real schema detected); #70 PASS→PARTIAL/UNKNOWN |
+
+Full per-rule before/after record: `docs/80_RULE_DIAGNOSTIC_QUALITY_REVIEW.md`.
+The regenerated client deliverables (80-item report, matrix, tasks, coverage,
+score, XLSX) are produced from one post-correction offline run over the same
+accepted replay input. The verdict remains `READY_TO_MERGE` from an
+engineering standpoint; PR #1 stays Draft and the merge decision stays with
+the user.
