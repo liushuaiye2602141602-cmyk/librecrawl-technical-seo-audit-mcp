@@ -632,6 +632,7 @@ class TestProductionCoverage:
         executed = sum(1 for r in rows if r.execution_status == ExecutionStatus.EXECUTED_FULL)
         not_checked = sum(1 for r in rows if r.execution_status == ExecutionStatus.NOT_CHECKED)
         not_applicable = sum(1 for r in rows if r.execution_status == ExecutionStatus.NOT_APPLICABLE)
+        partial = sum(1 for r in rows if r.execution_status == ExecutionStatus.EXECUTED_PARTIAL)
 
         assert executed >= 18, f"At least 18 EXISTING_FULL should execute, got {executed}"
         assert not_checked >= 12, f"At least 12 manual/external should be NOT_CHECKED, got {not_checked}"
@@ -639,4 +640,4 @@ class TestProductionCoverage:
             f"10 WP rules + 2 schema-empty rules (#28/#78) should be "
             f"NOT_APPLICABLE, got {not_applicable}"
         )
-        assert executed + not_checked + not_applicable == 80
+        assert executed + partial + not_checked + not_applicable == 80

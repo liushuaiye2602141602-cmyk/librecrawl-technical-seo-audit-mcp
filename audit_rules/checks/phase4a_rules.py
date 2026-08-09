@@ -269,7 +269,7 @@ def _classify_archive_page(url: str) -> Optional[str]:
         return "search_results"
 
     # Tag
-    if re.search(r"/tag/", url, re.IGNORECASE):
+    if re.search(r"/tag/|/hashtag/", url, re.IGNORECASE):
         return "tag"
 
     # Author

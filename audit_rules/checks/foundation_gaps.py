@@ -21,13 +21,14 @@ def _finding(
     evidence: str,
     severity: str | None = None,
     confidence: float = 1.0,
+    priority: str | None = None,
 ) -> Finding:
     return Finding(
         audit_id=rule.audit_id,
         rule_id=rule.rule_id,
         url=url,
         category=rule.category.value,
-        priority=rule.priority.value,
+        priority=priority or rule.priority.value,
         severity=severity or rule.severity.value,
         finding_type=rule.default_finding_type,
         scope=rule.scope.value,
@@ -225,6 +226,7 @@ def check_title_uniqueness(
                 evidence=f"estimated_width_px={estimated_width}; chars={len(title)}",
                 severity="Opportunity",
                 confidence=0.75,
+                priority="Medium",  # width is a heuristic, not a confirmed defect
             ))
 
     for group in titles.values():

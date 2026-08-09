@@ -46,6 +46,7 @@ class RuleRunner:
     providers: dict[str, DataProvider] = field(default_factory=dict)
     harness: Optional[CompatibilityHarness] = None
     last_shared_data: dict = field(default_factory=dict, init=False, repr=False)
+    last_psi_summary: dict = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self):
         if self.harness is None:
@@ -169,25 +170,31 @@ class RuleRunner:
         eligible_pages = sum(1 for p in page_contexts if p.status_code == 200)
         evaluated_overrides: dict[int, int] = {}
         if psi_sampled and eligible_pages and len(psi_sampled) < eligible_pages:
-            psi_success = sum(
-                1 for ctx, _reason in psi_sampled
-                if getattr(
-                    (existing_data.get("_psi_cache") or {}).get(
-                        (ctx.url.rstrip("/").lower(),
-                         existing_data.get("psi_strategy", "mobile"))
-                    ),
-                    "psi_status",
-                    "",
-                ) == "success"
+            from audit_rules.checks.performance import build_psi_execution_summary
+            psi_summary = build_psi_execution_summary(
+                existing_data.get("_psi_cache") or {},
+                sampled_count=len(psi_sampled),
+                eligible_pages=eligible_pages,
+                strategy=existing_data.get("psi_strategy", "mobile"),
             )
+            self.last_psi_summary = psi_summary
             for audit_id in _PSI_SAMPLED_RULES:
                 self.harness.partially_completed_rule_ids.add(audit_id)
                 self.harness.not_checked_reasons[audit_id] = (
-                    f"PSI sampled {len(psi_sampled)} of {eligible_pages} "
-                    f"eligible pages ({psi_success} successful); sampled "
-                    f"evidence is partial execution"
+                    f"PSI sampled {psi_summary['sampled_urls']} of "
+                    f"{psi_summary['eligible_pages']} eligible pages "
+                    f"({psi_summary['success']} successful, "
+                    f"{psi_summary['timeout']} timeout, "
+                    f"field_data_available={psi_summary['field_data_available']}); "
+                    f"sampled evidence is partial execution"
                 )
-                evaluated_overrides[audit_id] = len(psi_sampled)
+                evaluated_overrides[audit_id] = psi_summary["sampled_urls"]
+        # Crawl-layer rules that run without external data still evaluate a
+        # real positive count of units (sample != 0 evidence).
+        if site_ctx.sitemap_found:
+            evaluated_overrides[2] = 1
+        if any(getattr(p, "word_count", None) is not None for p in page_contexts):
+            evaluated_overrides[16] = eligible_pages
 
         # Step 6: Compute coverage matrix
         mgr = CoverageManager(self.registry)

@@ -17,6 +17,156 @@ def _cell(value) -> str:
     return str(value or "").replace("|", "\\|").replace("\r", " ").replace("\n", " ")
 
 
+def escape_markdown_literal(text: str) -> str:
+    """Escape literal angle brackets so `<a href>` renders as text, not HTML."""
+    return (str(text or "")
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;"))
+
+
+def task_type_for(
+    severity: str,
+    execution: str,
+    result: str,
+    *,
+    is_manual_rule: bool = False,
+) -> str:
+    """Map a finding to the client task taxonomy.
+
+    REMEDIATION   — confirmed defect/risk (Error/Warning in FAIL/WARNING rules)
+    OPTIMIZATION  — evidence-backed opportunity
+    DATA_REQUIRED — missing authoritative data (NOT_CHECKED rules)
+    MANUAL_REVIEW — human judgment required
+    MONITORING    — informational, non-actionable finding (Info severity)
+    """
+    if is_manual_rule:
+        return "MANUAL_REVIEW"
+    if execution == "NOT_CHECKED":
+        return "DATA_REQUIRED"
+    if execution == "NOT_APPLICABLE":
+        return "MONITORING"
+    sev = str(severity or "")
+    if sev == "Error" or sev == "Warning":
+        return "REMEDIATION"
+    if sev == "Opportunity":
+        return "OPTIMIZATION"
+    return "MONITORING"
+
+
+def truncate_evidence_examples(
+    rows: list[dict],
+    limit: int = 8,
+) -> list[dict]:
+    """Cap representative examples so the client PDF never dumps raw arrays."""
+    return (rows or [])[:limit]
+
+
+def schema_type_distribution(
+    pages: list,
+) -> dict[str, int]:
+    """Count pages per detected JSON-LD type (for Rule 27 evidence)."""
+    distribution: Counter = Counter()
+    for page in pages:
+        types = getattr(page, "json_ld_types", None) or []
+        if not types:
+            continue
+        for schema_type in types:
+            distribution[str(schema_type)] += 1
+    return dict(distribution.most_common())
+
+
+def aggregate_orphan_remediation(
+    tasks: list[dict],
+    *,
+    audit_ids: tuple[int, ...] = (11, 45),
+) -> list[dict]:
+    """Merge Rule 11 + Rule 45 remediation rows into one deduplicated task.
+
+    The diagnosis may stay in both audits, but the customer action is the
+    same: add internal links. Returns a new task list with the aggregated
+    row and both audit attributions retained.
+    """
+    orphan_tasks = [
+        task for task in tasks
+        if str(task.get("audit_id")) in {str(aid) for aid in audit_ids}
+    ]
+    if not orphan_tasks:
+        return tasks
+    urls = list(dict.fromkeys(
+        task.get("url") for task in orphan_tasks if task.get("url")))
+    first = orphan_tasks[0]
+    aggregated = dict(first)
+    aggregated.update({
+        "audit_id": ",".join(str(aid) for aid in audit_ids),
+        "rule_id": "internal_discoverability",
+        "task_type": "REMEDIATION",
+        "finding": (
+            f"Fix internal discoverability for {len(urls)} orphan/"
+            f"zero-inbound pages (Related Audits: #"
+            + ", #".join(str(aid) for aid in audit_ids) + ")"
+        ),
+        "url": urls[0] if urls else "",
+        "affected_url_count": len(urls),
+        "affected_urls_sample": " | ".join(urls[:20]),
+        "evidence": (
+            "linked_from_count=0 on " + str(len(urls)) + " pages "
+            "(HTML link graph; sitemap discovery is not an internal link)"
+        ),
+    })
+    remaining = [
+        task for task in tasks
+        if str(task.get("audit_id")) not in {str(aid) for aid in audit_ids}
+    ]
+    return remaining + [aggregated]
+
+
+def final_artifact_metrics(
+    *,
+    audit_rows: int,
+    matrix_rows: int,
+    coverage_rows: int,
+    finding_rows: int,
+    task_rows: int,
+    manual_rows: int,
+    performance_rows: int,
+    pdf_pages: int,
+    confirmed_remediation: int,
+    optimization: int,
+    data_required: int,
+    manual_review_actions: int,
+    p0: int,
+    p1: int,
+    p2: int,
+    p3: int,
+    score: float,
+    coverage_pct: float,
+    confidence_pct: float,
+) -> dict:
+    """Single object every report section references for artifact counts."""
+    return {
+        "audit_rows": audit_rows,
+        "matrix_rows": matrix_rows,
+        "coverage_rows": coverage_rows,
+        "finding_rows": finding_rows,
+        "task_rows": task_rows,
+        "manual_rows": manual_rows,
+        "performance_rows": performance_rows,
+        "pdf_pages": pdf_pages,
+        "confirmed_remediation": confirmed_remediation,
+        "optimization": optimization,
+        "data_required": data_required,
+        "manual_review_actions": manual_review_actions,
+        "p0": p0,
+        "p1": p1,
+        "p2": p2,
+        "p3": p3,
+        "score": score,
+        "coverage_pct": coverage_pct,
+        "confidence_pct": confidence_pct,
+    }
+
+
 def _finding_rows(findings: list[Finding], limit: int = 20) -> list[str]:
     rows = []
     for finding in findings[:limit]:

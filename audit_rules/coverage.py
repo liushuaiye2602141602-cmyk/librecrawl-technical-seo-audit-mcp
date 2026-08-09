@@ -239,6 +239,16 @@ class CoverageManager:
             # If the rule is automatable and all required providers are available,
             # it was executed (ran and found nothing → pass)
             if rule.automatable:
+                # Rule 43: lastmod "accuracy" cannot be proven from observable
+                # anomalies alone; semantic accuracy needs CMS/change-log data.
+                if rule.audit_id == 43:
+                    return (
+                        ExecutionStatus.EXECUTED_PARTIAL,
+                        ResultStatus.PASS,
+                        "lastmod semantic accuracy vs actual content-change "
+                        "history requires CMS/change-log evidence; only "
+                        "observable anomalies scanned",
+                    )
                 # Case A: Executed, found nothing → PASS
                 status = (
                     ExecutionStatus.EXECUTED_PARTIAL

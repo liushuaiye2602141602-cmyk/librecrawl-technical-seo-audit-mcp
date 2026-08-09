@@ -218,11 +218,16 @@ class TestTTFB:
 
     def test_lab_ttfb_lower_confidence(self, registry, site_ctx, pages, data_with_snaps, no_field_snap):
         from audit_rules.checks.performance import check_ttfb
+        from audit_rules.adapters import DataUnavailableError
         rule = _get_rule(registry, 20)
         data = data_with_snaps(no_field_snap)
-        findings = check_ttfb(rule, site_ctx, pages([no_field_snap.url]), data)
-        if findings:
-            assert findings[0].confidence < 0.85, f"Lab TTFB should have low conf, got {findings[0].confidence}"
+        # Lab-only evidence (no field TTFB) must NOT produce a TTFB finding;
+        # Lighthouse LCP is not TTFB. The rule reports a data gap instead.
+        try:
+            check_ttfb(rule, site_ctx, pages([no_field_snap.url]), data)
+        except DataUnavailableError:
+            return
+        raise AssertionError("check_ttfb must raise DataUnavailableError without field TTFB")
 
 
 # ============================================================
@@ -501,7 +506,11 @@ class TestFalsePositiveProtection:
 
         all_findings = []
         all_findings.extend(check_core_web_vitals(_get_rule(registry, 19), site_ctx, pgs, data))
-        all_findings.extend(check_ttfb(_get_rule(registry, 20), site_ctx, pgs, data))
+        from audit_rules.adapters import DataUnavailableError
+        try:
+            all_findings.extend(check_ttfb(_get_rule(registry, 20), site_ctx, pgs, data))
+        except DataUnavailableError:
+            pass  # no field TTFB: coverage-gap state, not findings
         all_findings.extend(check_render_blocking(_get_rule(registry, 21), site_ctx, pgs, data))
         all_findings.extend(check_image_performance(_get_rule(registry, 22), site_ctx, pgs, data))
         all_findings.extend(check_mobile_experience(_get_rule(registry, 24), site_ctx, pgs, data))
@@ -526,7 +535,11 @@ class TestFalsePositiveProtection:
 
         all_findings = []
         all_findings.extend(check_core_web_vitals(_get_rule(registry, 19), site_ctx, pgs, data))
-        all_findings.extend(check_ttfb(_get_rule(registry, 20), site_ctx, pgs, data))
+        from audit_rules.adapters import DataUnavailableError as _DUE
+        try:
+            all_findings.extend(check_ttfb(_get_rule(registry, 20), site_ctx, pgs, data))
+        except _DUE:
+            pass  # no field TTFB: coverage-gap state, not findings
         all_findings.extend(check_render_blocking(_get_rule(registry, 21), site_ctx, pgs, data))
         all_findings.extend(check_image_performance(_get_rule(registry, 22), site_ctx, pgs, data))
         all_findings.extend(check_field_vs_lab(_get_rule(registry, 61), site_ctx, pgs, data))

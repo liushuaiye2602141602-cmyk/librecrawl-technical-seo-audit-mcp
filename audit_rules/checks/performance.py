@@ -37,6 +37,7 @@ from audit_rules.performance_thresholds import (
     CWVCategory, LCP_THRESHOLD, INP_THRESHOLD, CLS_THRESHOLD,
     FCP_THRESHOLD, TBT_THRESHOLD, LAB_SCORE_GOOD,
 )
+from audit_rules.adapters import DataUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +106,39 @@ def _all_snapshots(data: dict, pages: list[PageContext], strategy: str = "mobile
         if snap is not None:
             snapshots.append((ctx, snap))
     return snapshots
+
+
+def build_psi_execution_summary(
+    cache: dict,
+    sampled_count: int,
+    eligible_pages: int,
+    strategy: str = "mobile",
+) -> dict:
+    """Single authoritative summary of a PSI-sampled execution.
+
+    All performance rules reference this object so PDF / Matrix / Coverage /
+    Performance CSV report identical numbers.
+    """
+    snapshots = [
+        snap for snap in cache.values()
+        if not isinstance(snap, dict) and getattr(snap, "url", None)
+    ]
+    success = sum(
+        1 for snap in snapshots if snap.psi_status == "success")
+    timeout = sum(
+        1 for snap in snapshots if snap.psi_status in ("error", "timeout"))
+    field_available = sum(
+        1 for snap in snapshots
+        if getattr(snap, "field_data_scope", "") in ("URL", "ORIGIN"))
+    return {
+        "eligible_pages": eligible_pages,
+        "sampled_urls": min(sampled_count, eligible_pages),
+        "requested": len(snapshots),
+        "success": success,
+        "timeout": timeout,
+        "field_data_available": field_available,
+        "strategy": strategy,
+    }
 
 
 # ============================================================
@@ -912,48 +946,46 @@ def check_ttfb(
     page_contexts: list[PageContext],
     data: dict,
 ) -> list[Finding]:
-    """Rule 20: Time to First Byte (TTFB).
+    """Rule 20: Time to First Byte (TTFB) — field evidence only.
 
-    Phase 3: Lab TTFB from Lighthouse only (server-response-time).
-    DOES NOT provide real multi-region TTFB — that requires server logs
-    or RUM. Remains EXISTING_PARTIAL.
-
-    Lab TTFB is a proxy, NOT ground truth for real-user TTFB.
+    Lighthouse has no direct TTFB metric; using LCP/FCP as a TTFB proxy is
+    invalid (LCP values were previously mislabelled as TTFB). This rule
+    requires field TTFB (CrUX), RUM, or server-log evidence. When absent it
+    raises DataUnavailableError -> NOT_CHECKED / UNKNOWN, never a confirmed
+    defect.
     """
     findings: list[Finding] = []
     strategy = data.get("psi_strategy", "mobile")
+    any_field_ttfb = False
 
     for ctx, snap in _all_snapshots(data, page_contexts, strategy):
         url = ctx.url
         if snap.psi_status != "success":
             continue
 
-        # TTFB from field data (CrUX) if available
         ttfb_ms = snap.field_ttfb_ms
-        ttfb_source = "field (CrUX)"
         if ttfb_ms is None:
-            # Try lab
-            ttfb_ms = snap.lab_lcp_ms  # No direct TTFB in lab — use FCP as proxy
-            ttfb_source = "lab (Lighthouse FCP — NOT real TTFB)"
-            if ttfb_ms is None:
-                continue
+            continue  # no reliable TTFB evidence for this sample
+        any_field_ttfb = True
 
         if ttfb_ms > 800:  # >800ms is concerning
             findings.append(_mk(
                 rule, url=url,
-                detected=f"TTFB {ttfb_ms:.0f}ms ({ttfb_source})",
+                detected=f"TTFB {ttfb_ms:.0f}ms (field / CrUX)",
                 expected="TTFB < 800ms (good); < 200ms ideal",
-                evidence=f"ttfb_ms={ttfb_ms}, source={ttfb_source}",
+                evidence=f"ttfb_ms={ttfb_ms}, source=field(CrUX)",
                 detail=(
-                    f"Page {url} shows TTFB of {ttfb_ms:.0f}ms from "
-                    f"{ttfb_source}. Note: Lab Lighthouse TTFB/speed are "
-                    f"single-location proxies and NOT real multi-region "
-                    f"TTFB measurements. For accurate TTFB, use RUM or "
-                    f"server logs from multiple geographic locations. "
-                    f"Phase 3 cannot provide definitive TTFB assessment."
+                    f"Page {url} shows field TTFB of {ttfb_ms:.0f}ms. "
+                    f"For accurate multi-region TTFB, combine with RUM or "
+                    f"server logs."
                 ),
                 severity=Severity.OPPORTUNITY,
-                confidence=0.5 if "lab" in ttfb_source else 0.85,
+                confidence=0.85,
             ))
 
+    if not any_field_ttfb:
+        raise DataUnavailableError(
+            "Server response timing (TTFB) requires field TTFB (CrUX), RUM, "
+            "or server-log evidence; Lighthouse lab metrics are not TTFB."
+        )
     return findings
