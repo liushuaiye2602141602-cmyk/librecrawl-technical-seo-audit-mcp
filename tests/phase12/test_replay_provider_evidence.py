@@ -168,6 +168,7 @@ def test_replay_restores_psi_gsc_and_local_provider_into_real_runner(tmp_path, m
         def __init__(self, snapshots):
             self._cache = {(s.url.rstrip("/").lower(), s.strategy): s for s in snapshots}
         def is_available(self): return True
+        def collect(self, site_ctx, page_contexts, existing_data): return True
         def clear_cache(self): pass
         def get_snapshot(self, url, strategy="mobile"):
             return self._cache.get((url.rstrip("/").lower(), strategy))
@@ -193,7 +194,8 @@ def test_replay_restores_psi_gsc_and_local_provider_into_real_runner(tmp_path, m
         "Server Logs": StaticProvider("Server Logs", {"Server Logs"}, "server_logs", logs),
     })
     direct_findings, direct_coverage = direct_runner.run_from_export(
-        export, base_url="https://example.com/")
+        export, base_url="https://example.com/",
+        existing_data={"deliverable_pipeline_available": True})
     evidence = build_provider_evidence(direct_runner)
     document = build_replay_document(
         source_url="https://example.com/", git_head="e" * 40,

@@ -577,6 +577,12 @@ class _ReplayPageSpeedProvider:
     def is_available(self) -> bool:
         return bool(self._cache)
 
+    def collect(self, site_ctx, page_contexts, shared_data: dict) -> bool:
+        """Offline replay evidence is already collected; keep the provider
+        available so PSI-backed rules execute instead of degrading to
+        NOT_CHECKED."""
+        return True
+
     def clear_cache(self) -> None:
         # Replay cache is immutable audit evidence, not a cross-audit live cache.
         return None
@@ -663,6 +669,7 @@ def run_replay_pipeline(document: dict):
     from audit_rules.runner import RuleRunner
 
     export_data, existing_data = replay_pipeline_inputs(document)
+    existing_data.setdefault("deliverable_pipeline_available", True)
     runner = RuleRunner(load_registry(), providers=build_replay_providers(document))
     return runner.run_from_export(
         export_data, base_url=document["source_url"], existing_data=existing_data)

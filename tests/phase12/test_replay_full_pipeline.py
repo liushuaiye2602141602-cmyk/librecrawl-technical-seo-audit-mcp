@@ -98,3 +98,64 @@ def test_loaded_replay_runs_real_rule_pipeline_with_semantic_parity(tmp_path):
         for f in replay_findings if f.audit_id in selected_ids)
     assert replay_selected == direct_selected
     assert replay_existing_data["replay_provider_evidence"] == {}
+
+
+def _pagespeed_evidence(pages: list[dict]) -> dict:
+    sample_urls = [page["url"] for page in pages[:5]]
+    snapshots = [
+        {
+            "url": url,
+            "strategy": "mobile",
+            "psi_status": "success",
+            "lab_performance_score": 80,
+            "lab_lcp_ms": 2400.0,
+            "field_data_scope": "NONE",
+        }
+        for url in sample_urls
+    ]
+    return {
+        "pagespeed": {
+            "status": "CHECKED",
+            "strategy": "mobile",
+            "snapshots": snapshots,
+            "collected_at": "",
+        },
+        "provider_status": {},
+    }
+
+
+def test_replay_pagespeed_evidence_keeps_performance_rules_executed():
+    """A replay carrying real PSI evidence must execute the PSI-backed rules
+    instead of degrading them to NOT_CHECKED (replay provider parity)."""
+    from audit_rules.replay import build_replay_document, run_replay_pipeline
+    from tests.phase12.test_replay_315_page_parity import _synthetic_export
+
+    pages, links = _synthetic_export()
+    document = build_replay_document(
+        source_url="https://example.com/",
+        git_head="c" * 40,
+        generated_at="2026-08-09T09:00:00Z",
+        crawl_metadata={
+            "crawl_parameters": {},
+            "truncation_status": "NOT_TRUNCATED",
+        },
+        pages=pages,
+        links=links,
+        site_data={
+            "robots_txt": {"found": True, "disallow_count": 0},
+            "sitemap": {"found": True, "url": "https://example.com/sitemap.xml"},
+        },
+        sitemap_reconciliation={
+            "sitemap_total": 315, "crawl_total": 315,
+        },
+        crawl_completeness={"pages_crawled": 315, "audit_complete": True},
+        provider_evidence=_pagespeed_evidence(pages),
+    )
+    _, coverage = run_replay_pipeline(document)
+    by_id = {row.audit_id: row for row in coverage}
+    executed_ids = {19, 21, 22, 24, 40, 61, 62, 63}
+    for rule_id in executed_ids:
+        assert by_id[rule_id].execution_status.value != "NOT_CHECKED", (
+            f"rule {rule_id} degraded to NOT_CHECKED in replay pipeline"
+        )
+    assert by_id[1].execution_status.value != "NOT_CHECKED"
