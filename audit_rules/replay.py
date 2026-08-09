@@ -30,6 +30,15 @@ SAFE_RESPONSE_HEADERS = frozenset({
     "x-content-type-options",
     "x-frame-options",
     "x-robots-tag",
+    # Technology Intelligence observable server/edge headers.
+    "server",
+    "via",
+    "x-powered-by",
+    "cf-ray",
+    "cf-cache-status",
+    "x-cache",
+    "x-served-by",
+    "x-generator",
 })
 
 # Current LibreCrawl EXPORT_FIELDS, sitemap-fill additions, and normalized
@@ -43,6 +52,7 @@ REPLAY_PAGE_FIELDS = frozenset({
     "mixed_content_urls", "og_tags", "redirects", "response_time_ms", "robots",
     "size", "source", "status_code", "structured_data", "title", "twitter_tags",
     "url", "viewport", "word_count",
+    "allowlisted_headers", "scripts", "stylesheets",
 })
 
 REPLAY_LINK_FIELDS = frozenset({
@@ -322,7 +332,9 @@ def _page_record(page: dict) -> dict:
     }
     headers = page.get("response_headers") or page.get("headers")
     if headers is not None:
-        record["response_headers"] = sanitize_response_headers(headers)
+        safe_headers = sanitize_response_headers(headers)
+        record["response_headers"] = safe_headers
+        record["allowlisted_headers"] = safe_headers
     if isinstance(record.get("links_detailed"), list):
         record["links_detailed"] = [
             _page_link_record(item) for item in record["links_detailed"]

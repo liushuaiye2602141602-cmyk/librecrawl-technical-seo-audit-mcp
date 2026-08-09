@@ -120,6 +120,8 @@ EXPORT_FIELDS = [
     "og_tags", "twitter_tags", "json_ld", "hreflang",
     # Analytics fingerprint
     "analytics",
+    # Technology Intelligence observable signals (source HTML + safe headers)
+    "response_headers", "scripts", "stylesheets", "generator",
 ]
 
 def _parse_export(export) -> tuple:
