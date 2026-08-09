@@ -1,244 +1,298 @@
 # Production Acceptance Report
 
-## 1. Date
+## 1. Final decision
 
-2026-08-09 (Asia/Shanghai).
+`NOT_READY_TO_MERGE`.
 
-## 2. Branch
+The single authorized post-fix production crawl completed naturally and produced the current audit outputs, but the required `audit-replay-v1.json.gz` failed validation and was correctly deleted rather than registered. Consequently, crawl-page/replay-page parity cannot be proven and no final cleanup ZIP was requested. Two systemic issues were also confirmed after the crawl: the Rule 6 defect is fixed and green locally and in CI, while the Rule 1 evidence-contract issue remains unresolved. The production artifacts predate the Rule 6 fix.
 
-`feat/master-audit-completion`.
+Draft PR #1 remains OPEN and Draft. It was not merged, rebased, squashed, force-pushed, or marked ready.
 
-## 3. Git HEAD
+## 2. Branch and Git revisions
 
-Acceptance implementation HEAD before this report: `a59ad1c4918f407f95ef3a5da8e91185fe4dcadf`.
+- Branch: `feat/master-audit-completion`
+- Crawl execution HEAD: `beb8e317ccfce78e0b6d84d3b418e085db9491a7`
+- Replay false-positive fix: `a021cfb8e460c5cc11d7f7d42b2bff7c81bce915`
+- Redirect-evidence normalization fix: `f4fb12c942a8045904cddaf4662eefabb614c639`
+- Replay authorization-value validation fix: `acac52aa3a74fb61a7ae7eb4561773c1186a619e`
+- PR: <https://github.com/liushuaiye2602141602-cmyk/librecrawl-technical-seo-audit-mcp/pull/1>
 
-## 4. Draft PR #1
+The crawl was deliberately not repeated after the post-crawl fixes because exactly one new real crawl was authorized. The missing replay artifact prevents an exact offline regeneration from all 315 normalized page inputs.
 
-Fork-internal PR: <https://github.com/liushuaiye2602141602-cmyk/librecrawl-technical-seo-audit-mcp/pull/1>. It remains OPEN and Draft. It was not merged or marked ready.
+## 3. Why the recrawl was required
 
-## 5. GitHub CI result
+The earlier full production crawl covered 315 pages, but its frozen raw export retained only 35 pages and zero links. That could not prove current-code evaluation against the complete real input. The approved remedy was one new polite crawl plus a versioned, credential-free, runner-native replay artifact.
 
-PASS. Both push and pull-request `Offline validation (Python 3.12)` runs for `a59ad1c` completed successfully. The workflow is Ubuntu/Python 3.12, offline, secret-free, and does not call the production site or live providers.
+Before the crawl, the replay feature was implemented with TDD, independently reviewed, committed as `beb8e31`, normally pushed, and both push and PR CI checks passed.
 
-## 6. Target site
+## 4. Target and request-scoped safety envelope
 
-`https://www.baolaipackaging.com/`.
-
-## 7. Crawl parameters
-
+- Target: `https://www.baolaipackaging.com/`
 - `total_max_pages=1000`
 - `chunk_target_pages=25`
 - `politeness="polite"`
 - `fill_sitemap_orphans=true`
 - `sitemap_fill_cap=500`
 
-These were request-scoped acceptance safety settings only. They were not written into system defaults, the Rule Engine, or a permanent page/sitemap limit.
+These values were used only for this acceptance session. They were not written into system defaults, the Rule Engine, or permanent Master Audit limits.
 
-## 8. Crawl pages discovered
+## 5. Crawl identity, coverage, and runtime
 
-315 unique sitemap/crawl URLs. The main LibreCrawl export retained 35 crawler pages; sitemap reconciliation identified and safely filled 280 additional sitemap-only URLs.
+- Session: `c807ebd6a1bf4e63`
+- Upstream crawl ID: `6`
+- Status: `done`
+- Main crawl pages reported before sitemap fill: 42
+- Main export records before sitemap fill: 47
+- Sitemap-only candidates attempted: 268
+- Sitemap-only candidates successfully filled: 268
+- Final unique pages: 315
+- Final per-page artifact rows: 315 unique URLs
+- HTTP status distribution in the final per-page artifact: 315 x 200
+- Sitemap coverage: 100.0%
+- Final session pages: 315
+- Main crawl finalization runtime: 217 seconds
+- End-to-end session runtime: 587 seconds
+- Chunk error rate: 0.0%
+- Final polite delay: 500 ms
 
-## 9. Crawl pages fetched
+No crawl trap, faceted/query/session explosion, calendar loop, 429 surge, or production 5xx surge was observed. The crawl completed naturally below 1,000 pages. Truncation status is `NOT_TRUNCATED`; `CRAWL_TRUNCATED_BY_ACCEPTANCE_SAFETY_LIMIT` does not apply.
 
-315 pages were actually fetched and incorporated. HTTP results were 315 x 200, 0 x 3xx, 0 x 4xx, and 0 x 5xx after normal redirect following.
+The persisted upstream graph contains 2,753 link rows from the main crawl. A trustworthy complete post-fill link count is unavailable because the full replay artifact failed before registration; this is part of the merge blocker and is not inferred from derived reports.
 
-## 10. Sitemap URLs
+## 6. Request and error summary
 
-315 unique URLs were discovered across the sitemap index and nine nested sitemaps. Final sitemap coverage was 100.0%.
+- Sitemap fill: 268 attempted, 268 successful, 0 broken, cap not hit.
+- External link smoke: 81 targets; 77 OK, 2 OK after redirect, 1 timeout, 1 forbidden.
+- Content audit: 315 pages.
+- Extended checks: 3,125 findings.
+- No retry storm, rate-limit bypass, aggressive concurrency, or duplicate crawl start occurred.
 
-## 11. Sitemap orphan fill
+## 7. Replay artifact result
 
-280 of 280 sitemap-only candidates were attempted and successfully filled; 0 were broken. `sitemap_fill_cap=500` was not reached.
+Required filename pattern: `<domain>-<timestamp>.audit-replay-v1.json.gz`.
 
-## 12. Truncation status
+- Registration result: `FAIL`
+- Event: `v3_artifact_failed`
+- Error type: `ReplayValidationError`
+- Partial marker: `v3_artifacts_partial`
+- Invalid file registered: no
+- Invalid file retained: no
+- Replay pages: unavailable
+- Replay links: unavailable
+- Replay SHA-256: unavailable
+- Crawl/replay page parity: not proven
 
-`NOT_TRUNCATED`. The site completed naturally at 315 pages, below the 1,000-page acceptance safety limit. `CRAWL_TRUNCATED_BY_ACCEPTANCE_SAFETY_LIMIT` does not apply.
+The first failure event only recorded the exception type, not the fixed contract reason. Investigation against the preserved real SQLite data reproduced the failure: one real page meta description contains the ordinary phrase “basic information,” while the scanner treated every `Basic <word>` phrase as HTTP Basic authentication. The old scanner flagged six real database fields; after the minimal fix, the same frozen database produces zero credential-like matches. A real-string regression fixture now passes, and controlled `ReplayValidationError` events record a safe reason.
 
-## 13. Crawl runtime and errors
+Because the replay was deleted before the fix and the sitemap-filled raw page objects were not otherwise serialized, generating a replacement 315-page replay from CSV/PDF/snapshot data would fabricate missing inputs. No replacement was fabricated.
 
-- Crawl finalization event: 207 seconds.
-- End-to-end session, including reconciliation, checks, PSI, and artifacts: approximately 573 seconds.
-- Main crawl chunk error rate: 0.0%.
-- No crawl trap, faceted/query/session explosion, 429 surge, or production 5xx surge occurred.
-- External-link smoke found one timeout and one forbidden response; these are link findings, not crawl-engine failures.
-- The session was downloaded as ZIP with SHA-256 verification and removed from MCP state. The original read-only Compose mount prevented upstream row deletion; the mount was fixed and only acceptance crawl ID 5 was subsequently removed (35 URLs, 2,092 links, 107 issues, one crawl row).
+## 8. Preserved frozen evidence
 
-## 14. 80-rule coverage verification
+No cleanup ZIP was requested, so session/upstream rows remain available. Before any cleanup, the following local ignored evidence was preserved under `reports/production-acceptance-c807ebd6a1bf4e63/`:
 
-The production `coverage.csv` is valid UTF-8 CSV with exactly 80 unique audit IDs, exactly IDs 1..80:
+- `librecrawl-state.db` - 40,960 bytes
+- `librecrawl-users.db` - 4,759,552 bytes
+- `www.baolaipackaging.com-20260809-0654.audit-snapshot-v1.json.gz` - 75,658 bytes
+- Snapshot SHA-256: `24e312063b0e751bea92d4bb5016678bf97193a0a856e09ee9867d1f1055af6b`
+
+These files are diagnostic/frozen evidence, not a substitute for the missing replay contract.
+
+## 9. 80-rule coverage
+
+`coverage.csv` parses as UTF-8 CSV with exactly 80 unique audit IDs, exactly IDs 1..80:
 
 - `EXECUTED_FULL`: 42
-- `NOT_CHECKED`: 28
+- `EXECUTED_PARTIAL`: 1
+- `NOT_CHECKED`: 27
 - `NOT_APPLICABLE`: 10
-- result `PASS`: 28
-- result `FAIL`: 6
-- result `WARNING`: 2
-- result `OPPORTUNITY`: 6
-- result `UNKNOWN`: 38
+- `PASS`: 29
+- `FAIL`: 5
+- `WARNING`: 3
+- `OPPORTUNITY`: 6
+- `UNKNOWN`: 37
 
-No `NOT_CHECKED` or `NOT_APPLICABLE` row was marked PASS, and every `NOT_CHECKED` row had a reason. However, production rows such as Rules 13 and 20 contained findings while reporting `NOT_CHECKED`, evaluated 0, coverage 0%. That contradiction was fixed in `a59ad1c`: completed local/provider-backed evidence now becomes `EXECUTED_PARTIAL`, while a total provider failure remains `NOT_CHECKED/UNKNOWN`.
+No `NOT_CHECKED` or `NOT_APPLICABLE` row is reported as PASS. Provider absence remains a missing-source state rather than an SEO failure. The one partial row confirms the corrected partial-coverage contract executed in production.
 
-Because the full 315-page coverage artifact predates this fix, the corrected coverage contract still requires one post-fix production artifact run before merge.
+Coverage SHA-256: `fd1f34b45bd468f7de5dd63919fe23145ffda1962966ac9f160ae5183bc8b87f`.
 
-## 15. P0/P1 findings review
+## 10. Previous 53 confirmed false positives
 
-All 120 Critical/High task rows were programmatically grouped and manually reviewed:
+The prior 53 confirmed systemic false positives were distributed across Rules 1, 6, 11, 25, and 45.
 
-- Original P0/Critical: 9 rows. Three were systemic false positives, four were evidence-backed PSI lab opportunities, and two were explicitly informational/intentional signals (no confirmed field CWV pass and no staging URL discovered).
-- Original P1/High: 111 rows. Fifty were systemic link-graph false positives, 51 were evidence-backed site issues/opportunities, five were explicitly caveated lab proxies requiring logs/RUM, and five were field-vs-lab informational records.
-- Confirmed true P1 examples retained: one orphan candidate (`pet-food-packaging2.html`), duplicate/long-title work, mobile lab opportunities, and other evidence-backed remediation.
-- Site findings were not deleted or downgraded to make acceptance pass.
+Production artifact comparison gives:
 
-## 16. System false positives discovered
+- Resolved in the new crawl artifact: 37
+- Remaining systemic false positives in the new crawl artifact: 2
+- Reclassified as evidence-backed real zero-inbound issues: 14
+- Total: 53
 
-53 P0/P1 task rows were traced to implementation defects:
+The 14 reclassifications are Rule 11 URLs whose new snapshot evidence reports zero inbound links. Rules 25 and 45 no longer reproduce. Thirty-five prior Rule 11 false rows no longer reproduce.
 
-- Rule 1: one false Critical caused by treating the raw robots Disallow count as over-blocking despite no important path being blocked.
-- Rules 6 and 25: two false Critical findings caused by reading legacy `redirects` instead of production `http_redirects_to_https=true`.
-- Rule 11: 49 false High rows caused by ignoring production numeric `internal_links`/`external_links` when `links_detailed` was absent.
-- Rule 45: one false High row caused by the same link-count loss.
+The two remaining artifact defects are:
 
-Post-fix replay of the retained 35-page real export produced zero findings for Rules 1, 6, and 25; numeric outbound counts ranged from 3 to 131. Rule 11 retained only the real zero-inbound candidate rather than the false zero-outbound set.
+1. Rule 6 mapped production `alt_redirects_properly=true` directly into a legacy problem flag. Legacy output from the same run reported both HTTPS and www redirects as correct. The context-boundary normalization was fixed in `f4fb12c`; full regression and CI are green, but the production artifact still contains the old false Critical row.
+2. Rule 1 reports nine duplicate `Disallow: /` paths without retaining User-Agent association. That is insufficient evidence to claim a global Critical block and still requires an agent-aware fixture/data-contract decision. It was not hidden or heuristically removed.
 
-## 17. Fixes made during acceptance
+After the Rule 6 code fix, code-level disposition is 38 resolved, 1 remaining insufficient-evidence/systemic item, and 14 reclassified real. Artifact-level disposition remains 37/2/14 because exact offline replay is unavailable.
 
-- `a66b57a fix: correct production acceptance false positives`
-  - production redirect-key compatibility;
-  - numeric link-count fallback and unknown-link evidence handling;
-  - path-level robots evidence;
-  - writable per-session upstream cleanup mount;
-  - failing fixtures and regressions.
-- `8756344 fix: make production PDFs verifiable`
-  - Noto CJK font in the production image;
-  - page count from the WeasyPrint document rather than an absent optional reader;
-  - PDF regressions.
-- `a59ad1c fix: align partial coverage with produced findings`
-  - truthful `EXECUTED_PARTIAL` semantics for completed evidence when another required source is missing;
-  - provider-total-error behavior remains `NOT_CHECKED/UNKNOWN`;
-  - coverage regression.
+## 11. P0/P1 human review
 
-Each fix followed failing fixture -> failing regression -> minimal fix -> focused tests -> full regression, and each was independently committed and normally pushed.
+The new task artifact contains 8 Critical/P0 rows and 72 High/P1 rows.
 
-## 18. Manual Review usability
+Critical rows:
 
-PASS. The formal equivalent artifact is `manual-review.md`, covering all eight manual rules. Each entry provides `why_manual`, required evidence, review instructions, acceptance criteria, PENDING/IN_REVIEW/final statuses, evidence, notes, reviewer, and timestamp fields. Pending manual work remains `NOT_CHECKED`; no manual PASS was fabricated.
+- Rule 1: one insufficient-evidence/systemic robots finding; blocker.
+- Rule 6: one confirmed systemic false positive; fixed after the crawl but still present in the artifact.
+- Rule 19: five PSI lab/field-data records; three are opportunities and two explicitly state that absent CrUX data is not a confirmed PASS.
+- Rule 67: one informational “no staging URL found” record, explicitly not proof that no staging site exists.
 
-## 19. Audit Score validation
+High rows:
 
-- Audit Score: 79.68 / 100
-- Coverage: 60.0%
-- Confidence: High (97.15%)
+- Rule 11: 15 zero-inbound candidates backed by the new snapshot graph summary.
+- Rule 13: 44 title-width/uniqueness findings.
+- Rule 17: one near-duplicate candidate.
+- Rule 20: four Lighthouse proxy opportunities explicitly labeled as not real TTFB/log evidence.
+- Rule 24: four simulated-mobile opportunities.
+- Rule 61: four field-vs-lab informational records.
+
+The human review therefore does not pass the merge gate: confirmed/insufficient-evidence systemic rows remain in the delivered P0 set. Real site findings were not removed or downgraded to make acceptance pass.
+
+## 12. Tasks
+
+`master-audit-tasks.csv` contains 894 open rows:
+
+- Priority: 8 Critical, 72 High, 813 Medium, 1 Low
+- Severity: 342 Error, 359 Warning, 92 Opportunity, 101 Info
+
+The artifact retains affected URLs, evidence, priority, severity, remediation, owner, acceptance criteria, and confidence. It is structurally usable, but it is not final because the two known P0 systemic rows remain.
+
+Tasks SHA-256: `8af39a37e7eb5ce37610eba40d3e6b72bd5e95fa98201656b386faf28e041f67`.
+
+## 13. Manual review
+
+The runner’s formal artifact is `manual-review.md` (not CSV). It contains all eight manual rules: 53, 54, 55, 56, 57, 71, 72, and 73. Every entry retains required evidence, review instructions, acceptance criteria, PENDING/IN_REVIEW/final status choices, evidence, notes, reviewer, and timestamp fields. No manual PASS was fabricated.
+
+Manual review SHA-256: `a1b59362d4253e5d350427ae403e96ef153f8736a314ebe4b5184ce8ec0fed68`.
+
+## 14. Score, coverage, and confidence
+
+- Audit Score: 81.37 / 100
+- Coverage: 61.43%
+- Finding confidence: 97.09% (High)
 - Eligible rules: 70
-- Executed rules: 42
-- Not checked: 28
+- Executed rules: 43
+- Not checked: 27
 - Not applicable: 10
 
-The JSON is valid UTF-8 and separates Score, Coverage, and Confidence. Missing sources are excluded from quality rather than counted as PASS. Recalculation from task-level aggregated evidence reproduced Score 79.68 and Coverage 60.0 deterministically; confidence was 97.12% versus the raw-finding score's 97.15%, as expected because task aggregation is not the raw scoring input. Deterministic scoring behavior is covered by the full regression suite.
+The score separates quality, coverage, and confidence. Missing providers are excluded rather than counted as PASS. Score JSON SHA-256: `8607e1827b047764c52d5ceed57fbdf94d8bc5ff8cd9cb546e3fd43dfab8a35c`.
 
-## 20. Task artifact usability
+Exact post-fix deterministic rerun against the same full input cannot be performed because the replay artifact is missing. Unit/regression fixtures continue to verify deterministic scoring.
 
-PASS with disclosed aggregation semantics:
+## 15. PSI and other providers
 
-- 936 task rows, all open/pending.
-- No duplicate task identity rows.
-- Three rows aggregate two affected URLs each; samples are retained.
-- Evidence, remediation, owner, acceptance criteria, and confidence are present on every row.
-- `assignee` defaults to the rule owner; due date and SEO impact remain intentionally assignable project fields.
-- P0/P1 evidence was reviewed as described above.
+PSI ran on exactly five representative URLs, mobile only, through the shared provider cache:
 
-## 21. PDF, Markdown, ZIP, and artifact validation
+- 4 successful normalized snapshots
+- 1 timeout (`PSI request timed out after 30s`)
+- No full-site PSI execution
 
-The SHA-256-verified ZIP is `www.baolaipackaging.com-1786252529.zip`, 458,536 bytes, SHA-256 `0eb82ec205d866492f1be893fa5d6121caad389b3e0282c949d640d2bdfbc845`, with 16 valid entries:
+`performance.csv` contains five mobile rows and has SHA-256 `9dbcc727307b13c95ca0f56d9d3154dac9996a1eb531185f81dbd13b89bca685`.
 
-- `coverage.csv`
-- `master-audit-tasks.csv`
-- `manual-review.md`
-- `audit-score.json`
-- `performance.csv`
-- snapshot
-- Master Markdown/PDF
-- legacy Markdown/PDF, per-page, sitemap reconciliation, external links, content audit, and extended checks
-- bundle summary
+No credentials/data were supplied for GSC, Semrush, GA4, server logs, WordPress privileged, rendered DOM, or availability monitoring. They remain `NOT_CHECKED` / `LIVE_VALIDATION_PENDING`; no mock evidence was inserted.
 
-All CSVs parse, JSON parses, gzip snapshot loads, filenames match the returned manifest, ZIP integrity passes, and no artifact contains credentials. The production Master PDF is 8 pages and legacy PDF is 45 pages. All eight Master pages and representative legacy pages 1, 2, 10, 20, 30, 40, and 45 were visually reviewed.
+## 16. Snapshot and controlled diff
 
-The original Master PDF exposed missing CJK glyphs in Acceptance Criteria. The production image now includes Noto CJK; a post-fix 8-page, 178,715-byte re-render was visually verified with readable Chinese. PDF metadata now reports the actual page count instead of zero. The legacy report remains data-dense and has minor unsupported decorative glyphs, but core text, URLs, tables, and checklist remain readable.
+- Production Snapshot A: schema v1, 315 pages, 315 indexable pages, gzip-valid.
+- Controlled synthetic Snapshot B: 315 pages, explicitly named `CONTROLLED-SYNTHETIC-B`; it is test-only and not production evidence.
+- Controlled diff: 3 rows - one `TITLE_CHANGED/INFORMATIONAL_CHANGE`, one `INDEXABILITY_CHANGED/REGRESSED`, and one `STATUS_CHANGED/REGRESSED`.
 
-## 22. Snapshot and Diff validation
+The snapshot/diff engine passes this controlled validation. The synthetic B data was not fed into production findings, coverage, tasks, score, Markdown, or PDF.
 
-PASS:
+## 17. Markdown and PDF validation
 
-- Snapshot A: real production snapshot, schema v1, 315 pages, exported, gzip-loaded, and validated.
-- Snapshot B: controlled data-only copy, 315 pages; no synthetic value entered production findings or score.
-- Diff artifact: 8 rows.
-- Correct classifications: REGRESSED 4, INFORMATIONAL_CHANGE 3, FIXED 1.
-- Exercised URL added/removed, 200->404, indexable->noindex, robots, canonical, title, and missing-description restoration.
+Generated real documents:
 
-## 23. PSI live validation
+- Master Markdown: 13,369 bytes; SHA-256 `c417e0ce3e77fd72e59356262a1c86c5a982156e1cd98d71e54f0809753b1f85`
+- Master PDF: 177,697 bytes; 9 A4 pages; SHA-256 `8fab5a755c914418f1d449584e821dbeb818a44bba16bda0bb09d9f4efbe9d41`
+- Legacy Markdown: 72,562 bytes; SHA-256 `d3330e87b28119ae6c729e82fa8fd1e94b8ffe18ed380c9f1745964d45fa634e`
+- Legacy PDF: 232,500 bytes; 45 A4 pages; SHA-256 `8d1e9fd67a1bcc91c7b426016fcc200bca47578d29974898fbd05b7c6f07c543`
 
-RUN. Exactly five representative URLs were tested, mobile only. All five API calls succeeded and `performance.csv` contains five mobile success rows. Existing provider cache/sampling was used. No URL had CrUX field data, so lab values were reported as opportunities/information and never as a confirmed field-data PASS.
+Both PDFs are valid, unencrypted WeasyPrint 69.0 PDF 1.7 files. All pages were rendered to PNG contact sheets for visual inspection. The Master PDF has readable Chinese acceptance criteria, stable headers/footers, no clipping, and no blank pages. The legacy PDF is readable and complete; a decorative unsupported glyph appears as a box in the final checklist heading, but substantive text and tables remain usable.
 
-## 24. GSC live validation
+PDF structural/visual validation passes, but the Master PDF is not merge-final because it still contains the two known systemic P0 rows.
 
-`LIVE_VALIDATION_PENDING`. No production GSC credential/data was supplied; affected rules remain missing-source states rather than fake PASS.
+## 18. ZIP result
 
-## 25. Semrush live validation
+- Final post-fix ZIP: not generated
+- ZIP size: unavailable
+- ZIP SHA-256: unavailable
+- ZIP integrity/CRC: not applicable
 
-`LIVE_VALIDATION_PENDING`. No Semrush credential/data was supplied.
+This is intentional fail-closed behavior. The replay artifact was invalid, so calling `librecrawl_audit_zip(..., auto_cleanup=true)` would have produced a seemingly complete bundle and removed evidence needed for diagnosis. No cleanup was performed.
 
-## 26. GA4 live validation
+## 19. Secret and credential scan
 
-`LIVE_VALIDATION_PENDING`. No GA4 credential/data was supplied.
+PASS for the 19 current-session report/frozen-evidence files scanned. The real PageSpeed key has zero byte matches. No GitHub token, bearer JWT, private-key marker, OAuth token, cookie/session credential, or fabricated provider credential was found.
 
-## 27. Server Log live validation
+Tracked non-test source also passes the credential-pattern scan. The replay serializer retains only its fixed safe response-header allowlist and rejects credential-bearing query/fragment/signed URLs.
 
-`LIVE_VALIDATION_PENDING`. No production server-log artifact was supplied. PSI lab proxies are explicitly caveated and do not replace log/RUM evidence.
+## 20. Regression, integrity, and benchmark
 
-## 28. WordPress privileged validation
+Fresh local validation on supported Python 3.12:
 
-`LIVE_VALIDATION_PENDING` / not applicable to the detected generic-site profile. No WordPress privileged credential or export was supplied and no evidence was fabricated.
+- 762 tests passed
+- 0 failed
+- 0 skipped
+- 1 warning (existing `datetime.utcnow()` deprecation)
+- Test runtime: 1.11 seconds
+- Python compile: PASS
+- Rule registry: exactly 80 unique IDs, IDs 1..80
+- JSON validation: PASS
+- `docker compose config --quiet`: PASS
+- `git diff --check`: PASS
+- Production Docker artifact smoke: 80 coverage rows, valid replay, PDF, and ZIP with providers disabled
 
-## 29. Secret scan
+Fresh replay serialization benchmark:
 
-PASS. The real PSI credential had zero matches in tracked files, staged diff, relevant Git history, extracted acceptance artifacts, snapshot, or ZIP contents. No private-key marker was found. The only generic assignment candidate was a mock access-token fixture under `tests/providers/test_gsc_client.py`; it is not a real credential.
+- 100 pages: 0.006 seconds, 0.002 MiB
+- 1,000 pages: 0.050 seconds, 0.012 MiB
+- 5,000 pages: 0.249 seconds, 0.057 MiB
 
-## 30. Full local regression
+The benchmark uses compact synthetic inputs and verifies write-read-validation/page parity; it does not impose a system page cap.
 
-PASS on supported Python 3.12:
+## 21. GitHub CI
 
-- 694 tests passed, 0 failed, with one non-blocking `datetime.utcnow()` deprecation warning.
-- Python compile PASS.
-- Registry: 80 unique IDs, exactly 1..80.
-- Classifications: 18 EXISTING_FULL, 54 EXISTING_PARTIAL, 8 NEW_MANUAL.
-- Adapters: 72; optional providers: 9; MCP tools: 40.
-- Three tracked JSON files parsed.
-- `docker compose config -q` PASS.
-- Rule checks contain no direct network client; network clients remain in bounded providers. No destructive security pattern was found in checks/providers.
-- Production-image artifact validation: 80 coverage rows, valid PDF, valid ZIP, no provider artifacts when disabled.
-- Benchmark: 100 pages 0.100 s / 0.53 MiB; 1,000 pages 1.081 s / 4.69 MiB; 5,000 pages 5.426 s / 23.19 MiB. Every size returned 80 coverage rows.
+PASS. Both push and Draft PR `Offline validation (Python 3.12)` checks are green for:
 
-## 31. GitHub CI final status
+- `beb8e31` replay feature
+- `a021cfb` credential false-positive fix
+- `f4fb12c` redirect evidence normalization
+- `acac52a` authorization-value validation hardening
 
-Current acceptance-fix HEAD `a59ad1c` is green for both push and Draft PR workflows. The report commit must also complete the same CI before the final handoff is considered published.
+The final report commit must also pass the same two checks before handoff. PR #1 remains Draft.
 
-## 32. Known limitations
+## 22. Merge-gate evaluation
 
-- The only full 315-page production ZIP was generated before the acceptance fixes and therefore preserves the defects as audit evidence.
-- A complete post-fix 315-page end-to-end artifact bundle was not generated; only a real 35-page retained-export replay, regression fixtures, production-image artifact validation, and CJK re-render validate the fixes.
-- GSC, Semrush, GA4, server logs, WordPress privileged, rendered DOM, and availability-monitor live evidence remain pending when applicable.
-- PSI had lab data but no CrUX field data for the five sampled URLs.
-- The legacy PDF is intentionally data-dense and some decorative emoji glyphs render as boxes; substantive text remains readable.
-- One Python deprecation warning remains non-blocking.
+- One current-code real crawl completed naturally: PASS
+- Complete replay safely preserved: FAIL
+- Crawl/replay page parity: FAIL / unavailable
+- Full final artifact package from final HEAD: FAIL
+- Coverage exactly 80 rows: PASS
+- Previous 53 false positives dispositioned: PASS, but one insufficient-evidence/systemic item remains
+- No blocking systemic P0/P1: FAIL
+- Tasks structurally usable: PASS, but not merge-final
+- Manual workflow valid: PASS
+- Score/coverage/confidence semantics: PASS
+- PDF structurally valid: PASS, but not merge-final
+- Final ZIP valid: FAIL / not generated
+- Snapshot/diff engine: PASS
+- No fabricated provider evidence: PASS
+- Secret scan: PASS
+- Fresh full regression: PASS
+- GitHub CI: PASS before the final report commit
 
-## 33. Remaining external requirements and merge gate
+The only honest final result is:
 
-Before merge, run one polite post-fix production acceptance artifact pass with the same request-scoped safety settings and confirm:
+`NOT_READY_TO_MERGE`
 
-- corrected Rules 1, 6, 11, 25, and 45 outputs;
-- production `EXECUTED_PARTIAL` coverage rows where local evidence exists but GSC/log evidence is missing;
-- readable CJK PDF and non-zero PDF page metadata in the delivered ZIP;
-- unchanged secret hygiene and green final CI.
-
-External provider credentials remain optional for this merge only if every missing source stays explicitly `NOT_CHECKED`/`LIVE_VALIDATION_PENDING`; no fake evidence is permitted.
-
-NOT_READY_TO_MERGE
+Do not merge Draft PR #1. A future acceptance decision requires either a user-approved new acquisition run after the remaining robots evidence contract is resolved, or another authorized method that preserves the complete normalized input without revisiting the production site.
