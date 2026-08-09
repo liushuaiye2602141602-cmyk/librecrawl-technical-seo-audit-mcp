@@ -92,6 +92,7 @@ class RuleRunner:
                 cms_applicability_decision,
             )
             from audit_rules.technology.detector import LocalTechnologyDetector
+            from audit_rules.technology.risks import TechnologyRiskCorrelator
             from audit_rules.technology.signatures import load_default_registry
 
             detector = LocalTechnologyDetector(
@@ -101,6 +102,9 @@ class RuleRunner:
             )
             technology_profile = detector.detect(page_contexts, site_ctx)
             existing_data["technology_profile"] = technology_profile
+            existing_data["technology_risks"] = (
+                TechnologyRiskCorrelator().correlate(technology_profile)
+            )
             site_profile = cms_applicability_decision(technology_profile)
             if site_profile == "wordpress_remote":
                 site_ctx.site_profile = site_profile
@@ -112,6 +116,7 @@ class RuleRunner:
                 "detection_status": "DETECTION_INCOMPLETE",
                 "not_detected_technologies": [],
             }
+            existing_data["technology_risks"] = []
 
         # The integration layer caches RuleRunner across audits. PSI cache is
         # audit-scoped evidence and must not leak URLs or results between sites.

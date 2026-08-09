@@ -184,6 +184,34 @@ def _write_external_evidence_artifacts(
     return output
 
 
+def _write_technology_artifact(
+    sid: str,
+    shared_data: dict,
+    domain: str,
+    timestamp: str,
+    reports_dir: Path,
+) -> Path | None:
+    """Persist the additive 09_Technology_Profile.json machine artifact."""
+    from audit_rules.technology.artifact import (
+        TECHNOLOGY_ARTIFACT_KIND,
+        serialize_technology_artifact,
+    )
+
+    profile = shared_data.get("technology_profile") or {}
+    if not profile:
+        return None
+    payload = serialize_technology_artifact(
+        profile, risks=shared_data.get("technology_risks") or [])
+    path = Path(reports_dir) / f"{domain}-{timestamp}.technology-profile.json"
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+        + "\n",
+        encoding="utf-8",
+    )
+    state.add_artifact(sid, TECHNOLOGY_ARTIFACT_KIND, path)
+    return path
+
+
 def _prepare_snapshot_artifacts(
     sid: str,
     export_data: dict,
@@ -892,6 +920,19 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
                     })
                 except Exception as exc:
                     _record_v3_artifact_failure(sid, "external_artifacts", exc)
+
+                try:
+                    from audit_rules.integration import _get_runner
+                    technology_path = _write_technology_artifact(
+                        sid, _get_runner().last_shared_data, domain, timestamp,
+                        REPORTS_DIR)
+                    if technology_path is not None:
+                        state.log_event(sid, "v3_technology_artifact_generated", {
+                            "path": str(technology_path),
+                        })
+                except Exception as exc:
+                    _record_v3_artifact_failure(
+                        sid, "technology_profile_json", exc)
 
                 try:
                     if not settings.get("master_report_enabled", True):

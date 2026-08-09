@@ -110,5 +110,8 @@ def test_runner_injects_technology_profile_and_wp_applicability():
     wp = [d for d in profile.get("detections", [])
           if d.get("technology_name") == "WordPress"]
     assert wp and wp[0]["confidence"] == "High"
+    risks = runner.last_shared_data.get("technology_risks") or []
+    assert any(risk.technology == "WordPress"
+               and 36 in risk.mapped_audit_ids for risk in risks)
     row36 = next(r for r in coverage if r.audit_id == 36)
     assert row36.execution_status.value != "NOT_APPLICABLE"
