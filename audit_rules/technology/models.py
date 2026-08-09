@@ -12,7 +12,7 @@ Confidence: client display High/Medium/Low; internal score 0.00–1.00.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from enum import Enum
 from typing import Any, Optional
 
@@ -20,6 +20,24 @@ from typing import Any, Optional
 SCHEMA_VERSION = "technology-profile-v1"
 DETECTOR_VERSION = "1.0.0"
 SIGNATURE_REGISTRY_VERSION = "1.0.0"
+
+
+def _to_jsonable(value: Any) -> Any:
+    """Recursively convert dataclass leaves (evidence) to plain JSON values."""
+    if is_dataclass(value) and not isinstance(value, type):
+        return _to_jsonable(asdict(value))
+    if isinstance(value, dict):
+        return {str(key): _to_jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_jsonable(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def profile_to_jsonable(profile: dict[str, Any]) -> dict[str, Any]:
+    """Serialize a TechnologyProfile dict into a fully JSON-safe structure."""
+    return _to_jsonable(profile)
 
 
 class DetectionStatus(str, Enum):
