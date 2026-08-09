@@ -1,0 +1,133 @@
+"""Semrush Backlinks API v4 provider for the V3 pipeline."""
+
+from __future__ import annotations
+
+import os
+from typing import Any
+from urllib.parse import urlsplit
+
+from audit_rules.context import PageContext, SiteContext
+from audit_rules.providers.base import DataProvider
+from audit_rules.providers.semrush_client import SemrushClient
+
+
+def _limit(value: object) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 100
+    return max(1, min(parsed, 500))
+
+
+class SemrushDataProvider(DataProvider):
+    def __init__(self, api_key: str = "", target: str = "", *,
+                 client: Any | None = None, lost_link_limit: int | None = None) -> None:
+        self._api_key = api_key or os.getenv("SEMRUSH_API_KEY", "")
+        self._target = target or os.getenv("SEMRUSH_TARGET", "")
+        self._client = client
+        self._lost_link_limit = _limit(
+            lost_link_limit if lost_link_limit is not None
+            else os.getenv("SEMRUSH_LOST_LINK_LIMIT", "100"))
+        self._referring_domain_limit = _limit(
+            os.getenv("SEMRUSH_REFERRING_DOMAIN_LIMIT", "100"))
+        self._database = os.getenv("SEMRUSH_DATABASE", "us").strip().lower() or "us"
+        self._keyword_limit = _limit(os.getenv("SEMRUSH_KEYWORD_LIMIT", "100"))
+        self._competitor_limit = _limit(os.getenv("SEMRUSH_COMPETITOR_LIMIT", "25"))
+        self.runtime_available = False
+
+    @property
+    def name(self) -> str:
+        return "Semrush API"
+
+    @property
+    def aliases(self) -> set[str]:
+        return {"Semrush API", "Semrush"}
+
+    def is_available(self) -> bool:
+        return bool(
+            os.getenv("MASTER_AUDIT_V3_ENABLED", "false").lower() == "true"
+            and os.getenv("MASTER_AUDIT_SEMRUSH_ENABLED", "true").lower() == "true"
+            and self._api_key)
+
+    def missing_rule_ids(self) -> list[int]:
+        return [31, 77]
+
+    def enrich_site(self, ctx: SiteContext) -> None:
+        pass
+
+    def enrich_page(self, ctx: PageContext) -> None:
+        pass
+
+    def _get_client(self) -> Any:
+        if self._client is None:
+            self._client = SemrushClient(self._api_key)
+        return self._client
+
+    def _resolve_target(self, site_ctx: SiteContext) -> str:
+        if self._target:
+            return self._target
+        parsed = urlsplit(site_ctx.base_url)
+        return parsed.hostname or ""
+
+    def collect(self, site_ctx: SiteContext, page_contexts: list[PageContext],
+                shared_data: dict) -> bool:
+        target = self._resolve_target(site_ctx)
+        payload = {"target": target, "database": self._database,
+                   "overview": None, "lost_links": [], "lost_total": 0,
+                   "lost_truncated": False, "referring_domains": [],
+                   "referring_domains_total": 0,
+                   "referring_domains_truncated": False, "domain_keywords": [],
+                   "organic_competitors": [], "errors": []}
+        shared_data["semrush"] = payload
+        if not target:
+            payload["errors"].append("target:ValueError")
+            self.runtime_available = False
+            return False
+        audited_host = (urlsplit(site_ctx.base_url).hostname or "").lower().rstrip(".")
+        target_host = target.strip().lower().rstrip(".")
+        if (not audited_host or "://" in target_host
+                or not (audited_host == target_host
+                        or audited_host.endswith("." + target_host))):
+            payload["errors"].append("target:SiteMismatch")
+            self.runtime_available = False
+            return False
+
+        client = self._get_client()
+        successes = 0
+        try:
+            payload["overview"] = client.backlinks_overview(target)
+            successes += 1
+        except Exception as exc:
+            payload["errors"].append(f"overview:{type(exc).__name__}")
+        try:
+            lost = client.lost_backlinks(target, limit=self._lost_link_limit)
+            payload["lost_links"] = lost.get("links") or []
+            payload["lost_total"] = int(lost.get("total", 0) or 0)
+            payload["lost_truncated"] = bool(lost.get("truncated", False))
+            successes += 1
+        except Exception as exc:
+            payload["errors"].append(f"lost_links:{type(exc).__name__}")
+        try:
+            domains = client.referring_domains(
+                target, limit=self._referring_domain_limit)
+            payload["referring_domains"] = domains.get("domains") or []
+            payload["referring_domains_total"] = int(domains.get("total", 0) or 0)
+            payload["referring_domains_truncated"] = bool(
+                domains.get("truncated", False))
+            successes += 1
+        except Exception as exc:
+            payload["errors"].append(f"referring_domains:{type(exc).__name__}")
+        try:
+            payload["domain_keywords"] = client.domain_keywords(
+                target, database=self._database, limit=self._keyword_limit)
+            successes += 1
+        except Exception as exc:
+            payload["errors"].append(f"domain_keywords:{type(exc).__name__}")
+        try:
+            payload["organic_competitors"] = client.organic_competitors(
+                target, database=self._database, limit=self._competitor_limit)
+            successes += 1
+        except Exception as exc:
+            payload["errors"].append(f"organic_competitors:{type(exc).__name__}")
+        self.runtime_available = successes > 0
+        return self.runtime_available

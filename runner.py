@@ -22,8 +22,11 @@ pick polling back up; otherwise we issue resume_from_crawl_id and continue.
 
 import threading
 import time
+import os
+import json
+import hashlib
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 import state
 import libreclient
@@ -44,9 +47,346 @@ HARD_DEADLINE_SECONDS    = 43200      # 12 hr ceiling — full polite crawls of
                                       # hours; never abort a real audit early.
 
 
+_REQUIRED_MASTER_ARTIFACTS = frozenset({
+    "audit_replay", "coverage_csv", "task_csv", "manual_review_md",
+    "audit_score_json", "audit_snapshot", "master_report_md",
+    "master_report_pdf",
+})
+
+
 _runner_thread: threading.Thread | None = None
 _wake = threading.Event()
 _shutdown = threading.Event()
+
+
+def _record_v3_artifact_failure(sid: str, artifact: str,
+                                exc: Exception) -> None:
+    """Expose an additive V3 artifact failure without leaking crawl data."""
+    detail = {
+        "artifact": artifact,
+        "error_type": type(exc).__name__,
+    }
+    if type(exc).__name__ == "ReplayValidationError":
+        # Replay validation messages are fixed contract reasons and contain no
+        # payload values or credentials.
+        detail["reason"] = str(exc).strip()[:200]
+    state.log_event(sid, "v3_artifact_failed", detail)
+    state.log_event(sid, "v3_artifacts_partial", {
+        "failed_artifact": artifact,
+    })
+
+
+def _write_manual_review_artifact(
+    sid: str,
+    base_url: str,
+    domain: str,
+    timestamp: str,
+    reports_dir: Path,
+) -> Path:
+    """Generate and register the review template for current manual rules."""
+    from audit_rules.manual_review import generate_manual_review_template
+    from audit_rules.registry import load_registry
+
+    path = Path(reports_dir) / f"{domain}-{timestamp}.manual-review.md"
+    path.write_text(
+        generate_manual_review_template(load_registry(), base_url),
+        encoding="utf-8",
+    )
+    state.add_artifact(sid, "manual_review_md", path)
+    return path
+
+
+def _write_v3_summary_artifacts(
+    sid: str,
+    findings: list,
+    coverage_rows: list,
+    domain: str,
+    timestamp: str,
+    reports_dir: Path,
+    audit_runner,
+) -> dict[str, Path]:
+    """Persist deterministic score and current-audit PSI summary artifacts."""
+    from audit_rules.checks.performance_csv import generate_performance_csv
+    from audit_rules.scoring import compute_audit_score
+
+    output: dict[str, Path] = {}
+    score_path = Path(reports_dir) / f"{domain}-{timestamp}.audit-score.json"
+    score_path.write_text(
+        json.dumps(compute_audit_score(findings, coverage_rows).to_dict(),
+                   ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    state.add_artifact(sid, "audit_score_json", score_path)
+    output["audit_score_json"] = score_path
+
+    psi = audit_runner.providers.get("PageSpeed API")
+    cache = getattr(psi, "_cache", {}) if psi is not None else {}
+    if cache:
+        strategies = getattr(psi, "_strategies", ["mobile"])
+        performance_path = Path(reports_dir) / f"{domain}-{timestamp}.performance.csv"
+        performance_path.write_text(
+            generate_performance_csv(cache, strategies[0] if strategies else "mobile"),
+            encoding="utf-8-sig", newline="")
+        state.add_artifact(sid, "performance_csv", performance_path)
+        output["performance_csv"] = performance_path
+    return output
+
+
+def _write_master_report_artifacts(
+    sid: str,
+    base_url: str,
+    findings: list,
+    coverage_rows: list,
+    domain: str,
+    timestamp: str,
+    reports_dir: Path,
+) -> dict[str, Path]:
+    """Write and register the decision-oriented V3 Markdown and PDF report."""
+    import pdf_report
+    from audit_rules.reporting import build_master_report
+
+    markdown = build_master_report(base_url, findings, coverage_rows)
+    md_path = Path(reports_dir) / f"{domain}-{timestamp}.master-audit.md"
+    md_path.write_text(markdown, encoding="utf-8")
+    state.add_artifact(sid, "master_report_md", md_path)
+
+    pdf_path = Path(reports_dir) / f"{domain}-{timestamp}.master-audit.pdf"
+    pdf_report.render_pdf(markdown, pdf_path, base_url=base_url)
+    state.add_artifact(sid, "master_report_pdf", pdf_path)
+    return {"master_report_md": md_path, "master_report_pdf": pdf_path}
+
+
+def _write_external_evidence_artifacts(
+    sid: str,
+    shared_data: dict,
+    domain: str,
+    timestamp: str,
+    reports_dir: Path,
+) -> dict[str, Path]:
+    """Write collected provider evidence in portable CSV/JSON formats."""
+    from audit_rules.external_artifacts import build_external_artifacts
+
+    suffixes = {
+        "search_performance_csv": "search-performance.csv",
+        "backlinks_csv": "backlinks.csv",
+        "server_log_analysis_csv": "server-log-analysis.csv",
+        "wordpress_audit_json": "wordpress-audit.json",
+        "ga4_audit_json": "ga4-audit.json",
+        "render_audit_json": "render-audit.json",
+        "availability_audit_json": "availability-audit.json",
+    }
+    output = {}
+    for kind, content in build_external_artifacts(shared_data).items():
+        path = Path(reports_dir) / f"{domain}-{timestamp}.{suffixes[kind]}"
+        path.write_text(content, encoding="utf-8")
+        state.add_artifact(sid, kind, path)
+        output[kind] = path
+    return output
+
+
+def _prepare_snapshot_artifacts(
+    sid: str,
+    export_data: dict,
+    base_url: str,
+    domain: str,
+    timestamp: str,
+    reports_dir: Path,
+) -> dict:
+    """Persist additive snapshot artifacts and return Rule 74 input data."""
+    from audit_rules.integration import build_snapshot_artifacts
+
+    baseline_value = os.environ.get("AUDIT_SNAPSHOT_BASELINE_PATH", "").strip()
+    baseline_path = Path(baseline_value) if baseline_value else None
+    output_value = os.environ.get("AUDIT_SNAPSHOT_OUTPUT_DIR", "").strip()
+    output_dir = Path(output_value) if output_value else Path(reports_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    baseline_available = False
+    changes = []
+    diff_csv = ""
+    try:
+        snapshot_bytes, changes, diff_csv = build_snapshot_artifacts(
+            export_data,
+            base_url,
+            baseline_path=baseline_path,
+        )
+        baseline_available = baseline_path is not None
+    except Exception as exc:
+        if baseline_path is None:
+            state.log_event(sid, "snapshot_artifact_failed", str(exc))
+            return {
+                "snapshot_changes": [],
+                "snapshot_baseline_available": False,
+            }
+        state.log_event(sid, "snapshot_diff_failed", str(exc))
+        try:
+            snapshot_bytes, _, _ = build_snapshot_artifacts(
+                export_data,
+                base_url,
+            )
+        except Exception as snapshot_exc:
+            state.log_event(sid, "snapshot_artifact_failed", str(snapshot_exc))
+            return {
+                "snapshot_changes": [],
+                "snapshot_baseline_available": False,
+            }
+
+    snapshot_path = output_dir / (
+        f"{domain}-{timestamp}.audit-snapshot-v1.json.gz"
+    )
+    snapshot_path.write_bytes(snapshot_bytes)
+    state.add_artifact(sid, "audit_snapshot", snapshot_path)
+
+    if baseline_available:
+        diff_path = output_dir / f"{domain}-{timestamp}.crawl-diff.csv"
+        diff_path.write_text(diff_csv, encoding="utf-8", newline="")
+        state.add_artifact(sid, "crawl_diff_csv", diff_path)
+
+    return {
+        "snapshot_changes": changes,
+        "snapshot_baseline_available": baseline_available,
+    }
+
+
+def _write_replay_artifact(
+    sid: str,
+    base_url: str,
+    domain: str,
+    timestamp: str,
+    reports_dir: Path,
+    *,
+    pages: list[dict],
+    links: list[dict],
+    site_data: dict,
+    reconciliation: dict,
+    completeness: dict,
+    session: dict,
+    fill_summary: dict,
+    audit_runner,
+) -> Path | None:
+    """Write, reload-validate, and register the current V3 replay input."""
+    from audit_rules.replay import (
+        assert_replay_parity,
+        build_provider_evidence,
+        build_replay_document,
+        load_replay_artifact,
+        write_replay_artifact,
+    )
+
+    path = Path(reports_dir) / f"{domain}-{timestamp}.audit-replay-v1.json.gz"
+    try:
+        settings = session.get("settings", {}) or {}
+        crawl_parameters = {
+            "total_max_pages": int(session.get("total_max_pages", 0) or 0),
+            "chunk_target_pages": int(
+                session.get("chunk_target_pages",
+                            settings.get("chunk_target_pages", 0)) or 0),
+            "politeness": str(
+                session.get("politeness", settings.get("politeness", "")) or ""),
+            "fill_sitemap_orphans": bool(settings.get("fill_sitemap_orphans", True)),
+            "sitemap_fill_cap": int(settings.get("sitemap_fill_cap", 0) or 0),
+        }
+        generated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        truncation_status = (
+            "CRAWL_TRUNCATED_BY_ACCEPTANCE_SAFETY_LIMIT"
+            if completeness.get("max_pages_hit") else
+            "NOT_TRUNCATED"
+        )
+        document = build_replay_document(
+            source_url=base_url,
+            git_head=os.environ.get("AUDIT_GIT_HEAD", "").strip(),
+            generated_at=generated_at,
+            crawl_metadata={
+                "crawl_started_at": session.get("started_at"),
+                "crawl_completed_at": session.get("finished_at") or generated_at,
+                "upstream_crawl_id": session.get("upstream_crawl_id"),
+                "crawl_parameters": crawl_parameters,
+                "truncation_status": truncation_status,
+                "politeness": crawl_parameters["politeness"],
+                "sitemap_fill": {
+                    "enabled": crawl_parameters["fill_sitemap_orphans"],
+                    "cap": crawl_parameters["sitemap_fill_cap"],
+                    "result": fill_summary,
+                },
+            },
+            pages=pages,
+            links=links,
+            site_data=site_data,
+            sitemap_reconciliation=reconciliation,
+            crawl_completeness=completeness,
+            provider_evidence=build_provider_evidence(audit_runner),
+        )
+        result = write_replay_artifact(
+            document,
+            path,
+            expected_source_url=base_url,
+            expected_completed_pages=len(pages),
+        )
+        replayed = load_replay_artifact(
+            path,
+            expected_source_url=base_url,
+            expected_completed_pages=len(pages),
+        )
+        parity = assert_replay_parity(document, replayed)
+        state.add_artifact(sid, "audit_replay", path)
+        state.log_event(sid, "v3_replay_artifact_generated", {
+            "pages": result.page_count,
+            "links": result.link_count,
+            "parity": parity.status,
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        })
+        return path
+    except Exception as exc:
+        try:
+            if path.exists():
+                path.unlink()
+        except OSError:
+            pass
+        _record_v3_artifact_failure(sid, "audit_replay", exc)
+        return None
+
+
+def _write_artifact_manifest(
+    sid: str,
+    base_url: str,
+    domain: str,
+    timestamp: str,
+    reports_dir: Path,
+    *,
+    git_head: str,
+    generated_at: str,
+) -> Path:
+    """Write current-session provenance for registered artifacts."""
+    rows = []
+    for artifact in state.list_artifacts(sid):
+        path = Path(artifact["path"])
+        if not path.is_file() or artifact["kind"] == "artifact_manifest":
+            continue
+        rows.append({
+            "artifact_name": path.name,
+            "artifact_type": artifact["kind"],
+            "generated_at": generated_at,
+            "git_head": git_head,
+            "session_id": sid,
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        })
+    rows.sort(key=lambda row: (row["artifact_type"], row["artifact_name"]))
+    manifest = {
+        "schema_version": "artifact-manifest-v1",
+        "artifact_type": "artifact_manifest",
+        "generated_at": generated_at,
+        "git_head": git_head,
+        "session_id": sid,
+        "source_url": base_url,
+        "artifacts": rows,
+    }
+    path = Path(reports_dir) / f"{domain}-{timestamp}.artifact-manifest.json"
+    path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    state.add_artifact(sid, "artifact_manifest", path)
+    return path
 
 
 # ── AIMD adaptive controller ──────────────────────────────────────────────────
@@ -227,7 +567,11 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
 
     sess = state.get_session(sid)
     url = sess["url"]
-    settings = sess.get("settings", {}) or {}
+    from audit_rules.configuration import load_operational_settings
+    operational_defaults, configuration_errors = load_operational_settings()
+    settings = {**operational_defaults, **(sess.get("settings", {}) or {})}
+    for error in configuration_errors:
+        state.log_event(sid, "configuration_warning", error)
     try:
         pages, links = libreclient.export_pages(upstream_crawl_id)
     except Exception as e:
@@ -448,6 +792,8 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
     # PDF report (v1.5) — Aditya-branded WeasyPrint render of the MD report.
     # Last so it includes all the analysis above.
     try:
+        if not settings.get("report_pdf_enabled", True):
+            raise RuntimeError("PDF report disabled by AUDIT_REPORT_PDF_ENABLED")
         import pdf_report
         pdf_path = REPORTS_DIR / f"{domain}-{timestamp}.pdf"
         pdf_meta = pdf_report.render_pdf(report_md, pdf_path, base_url=url)
@@ -459,7 +805,163 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
     except Exception as e:
         # PDF failure must NOT kill finalize — the MD + CSVs are the primary
         # artifacts.
-        state.log_event(sid, "pdf_generation_failed", str(e))
+        if (isinstance(e, RuntimeError)
+                and str(e).startswith("PDF report disabled")):
+            state.log_event(sid, "pdf_generation_skipped", str(e))
+        else:
+            state.log_event(sid, "pdf_generation_failed", str(e))
+
+    # ── v3.0 Phase 1: Master Audit V3 shadow pipeline ──────────────────────────
+    # Runs the unified 80-rule registry in parallel with existing audit code.
+    # Feature-flagged (MASTER_AUDIT_V3_ENABLED defaults to False) so existing
+    # behaviour is completely unchanged unless explicitly enabled.
+    try:
+        from audit_rules.integration import run_v3_pipeline, MASTER_AUDIT_V3_ENABLED
+        if MASTER_AUDIT_V3_ENABLED:
+            export_data = {
+                "site_check": site_data,
+                "pages": pages,
+                "links": links or [],
+                "completeness": completeness,
+            }
+            snapshot_data = _prepare_snapshot_artifacts(
+                sid,
+                export_data,
+                url,
+                domain,
+                timestamp,
+                REPORTS_DIR,
+            )
+            v3_findings, coverage_rows, coverage_csv = run_v3_pipeline(
+                export_data=export_data,
+                existing_data=snapshot_data,
+                base_url=url,
+                completeness=completeness,
+            )
+            if coverage_csv:
+                from audit_rules.integration import _get_runner
+                _write_replay_artifact(
+                    sid, url, domain, timestamp, REPORTS_DIR,
+                    pages=pages,
+                    links=links or [],
+                    site_data=site_data,
+                    reconciliation=recon,
+                    completeness=completeness,
+                    session=sess,
+                    fill_summary=fill_summary,
+                    audit_runner=_get_runner(),
+                )
+                cov_path = REPORTS_DIR / f"{domain}-{timestamp}.coverage.csv"
+                cov_path.write_text(coverage_csv, encoding="utf-8")
+                state.add_artifact(sid, "coverage_csv", cov_path)
+                state.log_event(sid, "v3_coverage_generated", {
+                    "rows": len(coverage_rows),
+                    "findings": len(v3_findings),
+                })
+
+                # Always emit the registry-driven async review template. It is
+                # additive and keeps manual rules truthful until a reviewer
+                # completes and parses the artifact.
+                try:
+                    manual_path = _write_manual_review_artifact(
+                        sid, url, domain, timestamp, REPORTS_DIR)
+                    state.log_event(sid, "v3_manual_review_generated", {
+                        "path": str(manual_path),
+                    })
+                except Exception as exc:
+                    _record_v3_artifact_failure(sid, "manual_review_md", exc)
+
+                try:
+                    from audit_rules.integration import _get_runner
+                    summary_paths = _write_v3_summary_artifacts(
+                        sid, v3_findings, coverage_rows, domain, timestamp,
+                        REPORTS_DIR, _get_runner())
+                    state.log_event(sid, "v3_summary_artifacts_generated", {
+                        "artifacts": sorted(summary_paths),
+                    })
+                except Exception as exc:
+                    _record_v3_artifact_failure(sid, "summary_artifacts", exc)
+
+                try:
+                    from audit_rules.integration import _get_runner
+                    evidence_paths = _write_external_evidence_artifacts(
+                        sid, _get_runner().last_shared_data, domain, timestamp,
+                        REPORTS_DIR)
+                    state.log_event(sid, "v3_external_artifacts_generated", {
+                        "artifacts": sorted(evidence_paths),
+                    })
+                except Exception as exc:
+                    _record_v3_artifact_failure(sid, "external_artifacts", exc)
+
+                try:
+                    if not settings.get("master_report_enabled", True):
+                        raise RuntimeError(
+                            "Master report disabled by AUDIT_MASTER_REPORT_ENABLED")
+                    report_paths = _write_master_report_artifacts(
+                        sid, url, v3_findings, coverage_rows, domain, timestamp,
+                        REPORTS_DIR)
+                    state.log_event(sid, "v3_master_report_generated", {
+                        "artifacts": sorted(report_paths),
+                    })
+                except Exception as exc:
+                    if (isinstance(exc, RuntimeError)
+                            and str(exc).startswith("Master report disabled")):
+                        state.log_event(sid, "v3_master_report_skipped", str(exc))
+                    else:
+                        _record_v3_artifact_failure(sid, "master_report", exc)
+
+                # Generate master-audit-tasks.csv from all findings (Rule 40)
+                try:
+                    from audit_rules.checks.audit_deliverables import (
+                        generate_task_csv,
+                    )
+                    from audit_rules.integration import _get_runner
+                    runner_obj = _get_runner()
+                    task_csv = generate_task_csv(
+                        findings=v3_findings,
+                        registry=runner_obj.registry,
+                        domain=domain,
+                        timestamp=timestamp,
+                        excluded_audit_ids={
+                            row.audit_id for row in coverage_rows
+                            if row.execution_status.value == "NOT_APPLICABLE"
+                        },
+                    )
+                    if task_csv:
+                        task_path = REPORTS_DIR / f"{domain}-{timestamp}.master-audit-tasks.csv"
+                        task_path.write_text(task_csv, encoding="utf-8")
+                        state.add_artifact(sid, "task_csv", task_path)
+                        state.log_event(sid, "v3_task_csv_generated", {
+                            "rows": task_csv.count("\n") - 1,
+                        })
+                except Exception as exc:
+                    # Task CSV is additive — failure must not impact audit
+                    _record_v3_artifact_failure(sid, "task_csv", exc)
+
+                current_kinds = {
+                    artifact["kind"] for artifact in state.list_artifacts(sid)
+                }
+                if _REQUIRED_MASTER_ARTIFACTS.issubset(current_kinds):
+                    try:
+                        manifest_generated_at = (
+                            datetime.now(timezone.utc).isoformat()
+                            .replace("+00:00", "Z")
+                        )
+                        manifest_path = _write_artifact_manifest(
+                            sid, url, domain, timestamp, REPORTS_DIR,
+                            git_head=os.environ.get("AUDIT_GIT_HEAD", "").strip(),
+                            generated_at=manifest_generated_at,
+                        )
+                        state.log_event(sid, "v3_artifact_manifest_generated", {
+                            "path": str(manifest_path),
+                        })
+                    except Exception as exc:
+                        _record_v3_artifact_failure(
+                            sid, "artifact_manifest", exc)
+    except Exception as e:
+        # V3 shadow pipeline is strictly additive — a failure here MUST NOT
+        # impact the existing audit artifacts (MD, PDF, CSVs, zip).
+        state.log_event(sid, "v3_pipeline_failed", str(e))
 
     state.log_event(sid, "finalized", {
         "pages": len(pages),

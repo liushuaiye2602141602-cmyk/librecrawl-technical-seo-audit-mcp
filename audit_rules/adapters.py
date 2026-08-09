@@ -1,0 +1,1202 @@
+"""Phase 1+2+3 Compatibility Adapters — bind check logic to registry rules.
+
+Phase 1 (18 EXISTING_FULL):
+  - Adapters bound to existing check implementations via adapter/binding.
+  - Do NOT modify existing check implementations.
+
+Phase 2 (13 EXISTING_PARTIAL → enhanced):
+  - New local checks in audit_rules.checks/ using only existing LibreCrawl data.
+  - Registered alongside Phase 1 adapters in the same harness.
+
+Phase 3 (8 performance rules):
+  - PSI-backed checks in audit_rules.checks.performance (Rules 19-63).
+  - PageSpeedDataProvider injects PerformanceSnapshot cache into data dict.
+  - Provider availability determines execution — NO direct API calls.
+
+Phase 4A (8 NEW_AUTO stateless rules):
+  - Local checks in audit_rules.checks.phase4a_rules (Rules 18,32,39,43,47,51,60,67).
+  - No external HTTP requests — using existing LibreCrawl data only.
+  - Rule 39 safe WordPress probes gated by WP_SECURITY_PROBES_ENABLED.
+
+Each adapter:
+  1. Takes (rule, site_ctx, page_contexts, data)
+  2. Produces list[Finding] in the unified format
+  3. Is registered by rule_id for dispatch by RuleRunner
+
+Usage:
+    registry = load_registry()
+    harness = CompatibilityHarness(registry)
+    findings = harness.run(site_ctx, page_contexts, existing_data)
+"""
+
+from typing import Optional, Callable
+import json
+import re
+from collections import defaultdict
+from dataclasses import dataclass, field
+
+from audit_rules.models import RuleDefinition, Finding
+from audit_rules.context import SiteContext, PageContext
+
+
+# Type alias for adapter function signature
+AdapterFunc = Callable[..., list[Finding]]
+
+
+class DataUnavailableError(RuntimeError):
+    """Raised when required crawl evidence was not exported."""
+
+
+class PartialExecutionError(DataUnavailableError):
+    """Carry findings when only part of the eligible evidence was available."""
+
+    def __init__(self, reason: str, findings: list[Finding]):
+        super().__init__(reason)
+        self.findings = findings
+
+# Lazy import for Phase 2 checks (avoids import errors when checks/ is being built)
+_PHASE2_CHECKS_LOADED = False
+_PHASE2_CHECKS: dict[str, Callable] = {}
+
+# Lazy import for Phase 3 performance checks
+_PHASE3_CHECKS_LOADED = False
+_PHASE3_CHECKS: dict[str, Callable] = {}
+
+# Lazy import for Phase 4A NEW_AUTO stateless rules
+_PHASE4A_CHECKS_LOADED = False
+_PHASE4A_CHECKS: dict[str, Callable] = {}
+
+# Lazy import for Phase 4B snapshot regression check
+_PHASE4B_CHECKS_LOADED = False
+_PHASE4B_CHECKS: dict[str, Callable] = {}
+
+# Phase 4C: seven previously unbound EXISTING_PARTIAL rules
+_PHASE4C_CHECKS_LOADED = False
+_PHASE4C_CHECKS: dict[str, Callable] = {}
+
+# Phase 5: Google Search Console backed checks
+_PHASE5_CHECKS_LOADED = False
+_PHASE5_CHECKS: dict[str, Callable] = {}
+
+# Phase 6: Semrush-backed checks
+_PHASE6_CHECKS_LOADED = False
+_PHASE6_CHECKS: dict[str, Callable] = {}
+
+# Phase 7: GA4-backed checks
+_PHASE7_CHECKS_LOADED = False
+_PHASE7_CHECKS: dict[str, Callable] = {}
+
+# Phase 8: server-log checks
+_PHASE8_CHECKS_LOADED = False
+_PHASE8_CHECKS: dict[str, Callable] = {}
+
+# Phase 9: WordPress privileged snapshot checks
+_PHASE9_CHECKS_LOADED = False
+_PHASE9_CHECKS: dict[str, Callable] = {}
+
+# Phase 11: portable rendered DOM and availability snapshot checks
+_PHASE11_CHECKS_LOADED = False
+_PHASE11_CHECKS: dict[str, Callable] = {}
+
+
+def _load_phase2_checks() -> dict[str, Callable]:
+    """Import Phase 2 check functions lazily."""
+    global _PHASE2_CHECKS_LOADED, _PHASE2_CHECKS
+    if _PHASE2_CHECKS_LOADED:
+        return _PHASE2_CHECKS
+    try:
+        from audit_rules.checks import get_check
+        checks_to_load = {
+            # NOTE: Rule 40 (audit_deliverables) is NOT registered here.
+            # generate_task_csv() has a different signature (findings, registry,
+            # domain, timestamp) and is called from integration.py after
+            # all findings are collected; it produces the master-audit-tasks.csv
+            # artifact rather than individual Findings.
+            "breadcrumb_schema": "check_breadcrumb",
+            "pagination_faceted_nav": "check_pagination",
+            "thin_content": "check_thin_content",
+            "duplicate_content": "check_near_duplicate",
+            "schema_errors_conflicts": "check_schema_conflict",
+            "seo_plugin_conflicts": "check_seo_plugin_conflict",
+            "permalink_rewrite": "check_permalink",
+            "url_normalization": "check_url_normalization",
+            "redirect_target_relevance": "check_redirect_relevance",
+            "language_code_match": "check_language_hreflang_match",
+            "form_link_accessibility": "check_form_accessibility",
+            "schema_visible_content_match": "check_schema_vs_visible",
+            "image_alt_link_semantics": "check_image_alt_quality",
+        }
+        for rule_id, check_name in checks_to_load.items():
+            fn = get_check(check_name)
+            if fn is not None:
+                _PHASE2_CHECKS[rule_id] = fn
+        _PHASE2_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE2_CHECKS
+
+
+def _load_phase3_checks() -> dict[str, Callable]:
+    """Import Phase 3 performance check functions lazily."""
+    global _PHASE3_CHECKS_LOADED, _PHASE3_CHECKS
+    if _PHASE3_CHECKS_LOADED:
+        return _PHASE3_CHECKS
+    try:
+        from audit_rules.checks import get_check
+        checks_to_load = {
+            "core_web_vitals": "check_core_web_vitals",
+            "server_response_ttfb": "check_ttfb",
+            "render_blocking_css_js": "check_render_blocking",
+            "image_optimization": "check_image_performance",
+            "mobile_usability": "check_mobile_experience",
+            "field_vs_lab_data": "check_field_vs_lab",
+            "third_party_script_impact": "check_third_party_scripts",
+            "font_loading_cls": "check_font_cls",
+        }
+        for rule_id, check_name in checks_to_load.items():
+            fn = get_check(check_name)
+            if fn is not None:
+                _PHASE3_CHECKS[rule_id] = fn
+        _PHASE3_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE3_CHECKS
+
+
+def _load_phase4a_checks() -> dict[str, Callable]:
+    """Import Phase 4A NEW_AUTO stateless check functions lazily."""
+    global _PHASE4A_CHECKS_LOADED, _PHASE4A_CHECKS
+    if _PHASE4A_CHECKS_LOADED:
+        return _PHASE4A_CHECKS
+    try:
+        from audit_rules.checks import get_check
+        checks_to_load = {
+            "tag_archive_search_indexability": "check_archive_search_indexability",
+            "media_sitemap": "check_media_sitemap",
+            "xmlrpc_rest_api_exposure": "check_wordpress_api_exposure",
+            "sitemap_lastmod_accuracy": "check_sitemap_lastmod",
+            "crawlable_a_href_links": "check_crawlable_links",
+            "internal_links_to_redirects": "check_internal_redirect_links",
+            "multilingual_canonical": "check_multilang_canonical",
+            "staging_site_indexed": "check_staging_indexability",
+        }
+        for rule_id, check_name in checks_to_load.items():
+            fn = get_check(check_name)
+            if fn is not None:
+                _PHASE4A_CHECKS[rule_id] = fn
+        _PHASE4A_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE4A_CHECKS
+
+
+def _load_phase4b_checks() -> dict[str, Callable]:
+    """Import the Phase 4B snapshot comparison check lazily."""
+    global _PHASE4B_CHECKS_LOADED, _PHASE4B_CHECKS
+    if _PHASE4B_CHECKS_LOADED:
+        return _PHASE4B_CHECKS
+    try:
+        from audit_rules.checks import get_check
+
+        check = get_check("check_regression_test")
+        if check is not None:
+            _PHASE4B_CHECKS["regression_test"] = check
+        _PHASE4B_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE4B_CHECKS
+
+
+def _load_phase4c_checks() -> dict[str, Callable]:
+    """Import crawl/header/output checks for previously unbound partial rules."""
+    global _PHASE4C_CHECKS_LOADED, _PHASE4C_CHECKS
+    if _PHASE4C_CHECKS_LOADED:
+        return _PHASE4C_CHECKS
+    try:
+        from audit_rules.checks import get_check
+
+        checks_to_load = {
+            "xml_sitemap_valid": "check_xml_sitemap_valid",
+            "crawl_budget_waste": "check_crawl_budget_waste",
+            "title_uniqueness": "check_title_uniqueness",
+            "cache_cdn": "check_cache_cdn",
+            "https_certificate": "check_https_certificate",
+            "audit_deliverables": "check_audit_deliverables",
+            "cache_plugin_cdn_synergy": "check_cache_plugin_cdn_synergy",
+        }
+        for rule_id, check_name in checks_to_load.items():
+            check = get_check(check_name)
+            if check is not None:
+                _PHASE4C_CHECKS[rule_id] = check
+        _PHASE4C_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE4C_CHECKS
+
+
+def _load_phase5_checks() -> dict[str, Callable]:
+    """Import GSC-backed checks lazily."""
+    global _PHASE5_CHECKS_LOADED, _PHASE5_CHECKS
+    if _PHASE5_CHECKS_LOADED:
+        return _PHASE5_CHECKS
+    try:
+        from audit_rules.checks import get_check
+        checks_to_load = {
+            "google_selected_canonical": "check_google_selected_canonical",
+            "keyword_cannibalization": "check_keyword_cannibalization",
+            "device_country_ranking": "check_device_country_ranking",
+            "declining_page_keyword_map": "check_declining_page_keyword_map",
+        }
+        for rule_id, check_name in checks_to_load.items():
+            check = get_check(check_name)
+            if check is not None:
+                _PHASE5_CHECKS[rule_id] = check
+        _PHASE5_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE5_CHECKS
+
+
+def _load_phase6_checks() -> dict[str, Callable]:
+    global _PHASE6_CHECKS_LOADED, _PHASE6_CHECKS
+    if _PHASE6_CHECKS_LOADED:
+        return _PHASE6_CHECKS
+    try:
+        from audit_rules.checks import get_check
+        for rule_id, check_name in {
+            "backlink_overview": "check_backlink_overview",
+            "lost_backlinks": "check_lost_backlinks",
+        }.items():
+            check = get_check(check_name)
+            if check is not None:
+                _PHASE6_CHECKS[rule_id] = check
+        _PHASE6_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE6_CHECKS
+
+
+def _load_phase7_checks() -> dict[str, Callable]:
+    global _PHASE7_CHECKS_LOADED, _PHASE7_CHECKS
+    if _PHASE7_CHECKS_LOADED:
+        return _PHASE7_CHECKS
+    try:
+        from audit_rules.checks import get_check
+        for rule_id, check_name in {
+            "gsc_ga4_config": "check_gsc_ga4_config",
+            "event_conversion_tracking": "check_event_conversion_tracking",
+        }.items():
+            check = get_check(check_name)
+            if check is not None:
+                _PHASE7_CHECKS[rule_id] = check
+        _PHASE7_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE7_CHECKS
+
+
+def _load_phase8_checks() -> dict[str, Callable]:
+    global _PHASE8_CHECKS_LOADED, _PHASE8_CHECKS
+    if _PHASE8_CHECKS_LOADED:
+        return _PHASE8_CHECKS
+    try:
+        from audit_rules.checks import get_check
+        check = get_check("check_server_log_analysis")
+        if check is not None:
+            _PHASE8_CHECKS["server_log_analysis"] = check
+        _PHASE8_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE8_CHECKS
+
+
+def _load_phase9_checks() -> dict[str, Callable]:
+    global _PHASE9_CHECKS_LOADED, _PHASE9_CHECKS
+    if _PHASE9_CHECKS_LOADED:
+        return _PHASE9_CHECKS
+    try:
+        from audit_rules.checks import get_check
+        for rule_id, check_name in {
+            "wp_updates_security": "check_wp_updates_security",
+            "wp_cron_tasks": "check_wp_cron_tasks",
+            "database_autoload_bloat": "check_database_autoload_bloat",
+            "admin_2fa": "check_admin_2fa",
+            "abandoned_plugins_themes": "check_abandoned_plugins_themes",
+        }.items():
+            check = get_check(check_name)
+            if check is not None:
+                _PHASE9_CHECKS[rule_id] = check
+        _PHASE9_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE9_CHECKS
+
+
+def _load_phase11_checks() -> dict[str, Callable]:
+    global _PHASE11_CHECKS_LOADED, _PHASE11_CHECKS
+    if _PHASE11_CHECKS_LOADED:
+        return _PHASE11_CHECKS
+    try:
+        from audit_rules.checks import get_check
+        for rule_id, check_name in {
+            "js_rendered_content": "check_js_rendered_content",
+            "lazy_load_indexability": "check_lazy_load_indexability",
+            "availability_5xx_monitoring": "check_availability_5xx_monitoring",
+        }.items():
+            check = get_check(check_name)
+            if check is not None:
+                _PHASE11_CHECKS[rule_id] = check
+        _PHASE11_CHECKS_LOADED = True
+    except Exception:
+        pass
+    return _PHASE11_CHECKS
+
+
+@dataclass
+class CompatibilityHarness:
+    """Binds EXISTING_FULL (18), EXISTING_PARTIAL (13), and performance (8)
+    rules to their check implementations.
+
+    Each adapter extracts findings from existing LibreCrawl output data
+    or injected PerformanceSnapshot cache and returns list[Finding] in
+    the unified format. No existing code is modified.
+    """
+
+    registry: list[RuleDefinition]
+    _adapters: dict[str, AdapterFunc] = field(default_factory=dict)
+    completed_rule_ids: set[int] = field(default_factory=set, init=False)
+    partially_completed_rule_ids: set[int] = field(default_factory=set, init=False)
+    not_checked_reasons: dict[int, str] = field(default_factory=dict, init=False)
+
+    def __post_init__(self):
+        """Register Phase 1 (18) + Phase 2 (13) + Phase 3 (8) adapters."""
+        # ── Phase 1: EXISTING_FULL adapters ──────────────────────────────
+        self._adapters = {
+            # 1: robots.txt existence + rules
+            "robots_txt_exists": _adapter_robots_txt,
+            # 3: noindex/nofollow audit
+            "page_noindex_nofollow": _adapter_noindex_nofollow,
+            # 4: crawl errors (4xx/5xx)
+            "crawl_errors_4xx_5xx": _adapter_crawl_errors,
+            # 6: unified domain + protocol
+            "unified_domain_protocol": _adapter_domain_protocol,
+            # 7: redirect chain audit
+            "redirect_chain_audit": _adapter_redirect_chains,
+            # 8: canonical correctness
+            "canonical_correctness": _adapter_canonical,
+            # 9: click depth
+            "click_depth": _adapter_click_depth,
+            # 11: internal link distribution
+            "internal_link_distribution": _adapter_internal_links,
+            # 14: meta description audit
+            "meta_description": _adapter_meta_description,
+            # 15: H1 heading hierarchy
+            "h1_heading_hierarchy": _adapter_h1_headings,
+            # 26: HSTS + security headers
+            "hsts_security_headers": _adapter_security_headers,
+            # 27: schema type coverage
+            "schema_type_coverage": _adapter_schema_coverage,
+            # 29: hreflang basics
+            "hreflang_basics": _adapter_hreflang_basics,
+            # 30: broken internal links
+            "broken_internal_links": _adapter_broken_links,
+            # 41: soft 404 detection
+            "soft_404": _adapter_soft_404,
+            # 42: sitemap URL indexability
+            "sitemap_url_indexability": _adapter_sitemap_indexability,
+            # 45: orphan pages
+            "orphan_pages": _adapter_orphan_pages,
+            # 58: hreflang indexability
+            "hreflang_indexability": _adapter_hreflang_indexability,
+        }
+        # ── Phase 2: EXISTING_PARTIAL local checks ───────────────────────
+        phase2 = _load_phase2_checks()
+        self._adapters.update(phase2)
+        # ── Phase 3: Performance/PSI checks ──────────────────────────────
+        phase3 = _load_phase3_checks()
+        self._adapters.update(phase3)
+        # ── Phase 4A: NEW_AUTO stateless rules ────────────────────────────
+        phase4a = _load_phase4a_checks()
+        self._adapters.update(phase4a)
+        # ── Phase 4B: Portable before/after snapshot comparison ─────────
+        phase4b = _load_phase4b_checks()
+        self._adapters.update(phase4b)
+        # Phase 4C: close the seven unbound EXISTING_PARTIAL entries.
+        phase4c = _load_phase4c_checks()
+        self._adapters.update(phase4c)
+        phase5 = _load_phase5_checks()
+        self._adapters.update(phase5)
+        phase6 = _load_phase6_checks()
+        self._adapters.update(phase6)
+        phase7 = _load_phase7_checks()
+        self._adapters.update(phase7)
+        phase8 = _load_phase8_checks()
+        self._adapters.update(phase8)
+        phase9 = _load_phase9_checks()
+        self._adapters.update(phase9)
+        phase11 = _load_phase11_checks()
+        self._adapters.update(phase11)
+
+    def run(
+        self,
+        site_ctx: SiteContext,
+        page_contexts: list[PageContext],
+        existing_data: dict,
+    ) -> list[Finding]:
+        """Run all registered adapters (Phase 1 EXISTING_FULL + Phase 2 local checks).
+
+        Returns:
+            List of Finding objects for all executed rules.
+        """
+        all_findings: list[Finding] = []
+        self.completed_rule_ids = set()
+        self.partially_completed_rule_ids = set()
+        self.not_checked_reasons = {}
+        for rule in self.registry:
+            if rule.rule_id not in self._adapters:
+                continue
+            adapter = self._adapters[rule.rule_id]
+            try:
+                findings = adapter(rule, site_ctx, page_contexts, existing_data)
+                all_findings.extend(findings)
+                self.completed_rule_ids.add(rule.audit_id)
+            except PartialExecutionError as exc:
+                all_findings.extend(exc.findings)
+                self.completed_rule_ids.add(rule.audit_id)
+                self.partially_completed_rule_ids.add(rule.audit_id)
+                self.not_checked_reasons[rule.audit_id] = str(exc)
+                continue
+            except DataUnavailableError as exc:
+                self.not_checked_reasons[rule.audit_id] = str(exc)
+                continue
+            except Exception as exc:
+                self.not_checked_reasons[rule.audit_id] = (
+                    f"Adapter failed ({type(exc).__name__})"
+                )
+                continue
+        return all_findings
+
+
+# ============================================================
+# Adapter functions — one per EXISTING_FULL rule
+# ============================================================
+
+def _mk_finding(rule: RuleDefinition, url: str = "", detected: str = "",
+                expected: str = "", evidence: str = "", detail: str = "",
+                confidence: float = 1.0, severity: str | None = None) -> Finding:
+    """Factory for Finding with rule-derived defaults."""
+    return Finding(
+        audit_id=rule.audit_id,
+        rule_id=rule.rule_id,
+        url=url,
+        category=rule.category.value,
+        priority=str(rule.priority.value),
+        severity=severity or str(rule.severity.value),
+        finding_type=rule.default_finding_type,
+        scope=str(rule.scope.value),
+        detected_value=detected,
+        expected_value=expected,
+        evidence=evidence,
+        finding_detail=detail or evidence,
+        remediation=rule.remediation,
+        owner=rule.owner,
+        acceptance_criteria=rule.acceptance_criteria,
+        data_source=rule.required_data_sources[0] if rule.required_data_sources else "LibreCrawl",
+        confidence=confidence,
+    )
+
+
+def _adapter_robots_txt(
+    rule: RuleDefinition, site_ctx: SiteContext,
+    page_contexts: list[PageContext], data: dict,
+) -> list[Finding]:
+    """Rule 1: robots.txt existence + rules."""
+    findings = []
+
+    if not site_ctx.robots_txt_found:
+        findings.append(_mk_finding(
+            rule, url=site_ctx.base_url,
+            detected="/robots.txt not found",
+            expected="/robots.txt returns 200",
+            evidence="robots_txt_found=False",
+            detail="/robots.txt not found or inaccessible",
+        ))
+    else:
+        robots_data = (site_ctx._site_data or {}).get("robots_txt")
+        if (isinstance(robots_data, dict)
+                and isinstance(robots_data.get("groups"), list)):
+            # Recompute the effective search-agent blocks from the preserved
+            # groups (RFC 9309 most-specific / last-match semantics) so that
+            # already-normalized replay inputs are judged with current-code
+            # evidence rather than a stale flattened parser result.
+            from audit_rules.robots_contract import effective_important_blocks
+
+            block_evidence = effective_important_blocks(robots_data.get("groups"))
+            important_blocked = list(dict.fromkeys(
+                path for item in block_evidence
+                for path in item.get("blocked_paths", [])
+            ))
+        else:
+            important_blocked = (
+                robots_data.get("important_blocked", [])
+                if isinstance(robots_data, dict) else []
+            )
+            block_evidence = (
+                robots_data.get("important_blocked_evidence", [])
+                if isinstance(robots_data, dict) else []
+            )
+        # Prefer path-level production evidence. A high raw count can consist
+        # entirely of bot-specific directives and is not SEO over-blocking.
+        over_blocked = bool(important_blocked) if robots_data is not None else (
+            site_ctx.robots_txt_disallow_count > 5
+        )
+        if over_blocked:
+            applicable_agents = list(dict.fromkeys(
+                agent for item in block_evidence
+                for agent in item.get("applicable_agents", [])
+            ))
+            findings.append(_mk_finding(
+                rule, url=site_ctx.base_url,
+                detected=(
+                    f"Important paths blocked: {', '.join(important_blocked)}"
+                    if important_blocked else
+                    f"Disallow count: {site_ctx.robots_txt_disallow_count}"
+                ),
+                expected="Important crawlable paths are not blocked",
+                evidence=(
+                    json.dumps({
+                        "applicable_agents": applicable_agents,
+                        "blocked_paths": important_blocked,
+                        "robots_status": robots_data.get("status", 200),
+                    }, ensure_ascii=False, sort_keys=True)
+                    if block_evidence else
+                    f"important_blocked={important_blocked}"
+                    if important_blocked else
+                    f"robots_txt_disallow_count={site_ctx.robots_txt_disallow_count}"
+                ),
+                detail=(
+                    f"Important paths are blocked by robots.txt: {', '.join(important_blocked)}"
+                    if important_blocked else
+                    f"High disallow count ({site_ctx.robots_txt_disallow_count}) — review for over-blocking"
+                ),
+            ))
+
+        sitemap_declared = (
+            robots_data.get("sitemap_declared", [])
+            if isinstance(robots_data, dict) else []
+        )
+        if (isinstance(robots_data, dict)
+                and "sitemap_declared" in robots_data
+                and not sitemap_declared):
+            findings.append(_mk_finding(
+                rule, url=site_ctx.base_url,
+                detected="No Sitemap declaration in robots.txt",
+                expected="At least one valid Sitemap: URL",
+                evidence=json.dumps({
+                    "robots_status": robots_data.get("status", 200),
+                    "sitemap_declared": [],
+                }, sort_keys=True),
+                detail="robots.txt does not declare a Sitemap URL",
+            ))
+
+    return findings
+
+
+def _adapter_noindex_nofollow(
+    rule: RuleDefinition, site_ctx: SiteContext,
+    page_contexts: list[PageContext], data: dict,
+) -> list[Finding]:
+    """Rule 3: page noindex/nofollow check."""
+    findings = []
+    for ctx in page_contexts:
+        if ctx.status_code != 200:
+            continue
+        robots = (ctx.robots or "").lower()
+        if "noindex" in robots and ctx.depth <= 2:
+            findings.append(_mk_finding(
+                rule, url=ctx.url,
+                detected=f"meta robots: {ctx.robots}",
+                expected="index, follow for important pages",
+                evidence=f"robots={ctx.robots}",
+                detail=f"Page at depth {ctx.depth} has noindex — may block indexing of important content",
+            ))
+    return findings
+
+
+def _adapter_crawl_errors(
+    rule: RuleDefinition, site_ctx: SiteContext,
+    page_contexts: list[PageContext], data: dict,
+) -> list[Finding]:
+    """Rule 4: crawl errors (4xx/5xx)."""
+    findings = []
+    for ctx in page_contexts:
+        if ctx.status_code >= 400:
+            findings.append(_mk_finding(
+                rule, url=ctx.url,
+                detected=f"Status {ctx.status_code}",
+                expected="Status 200 for crawlable pages",
+                evidence=f"status_code={ctx.status_code}",
+                detail=f"Broken page: {ctx.url} returned {ctx.status_code}",
+            ))
+    return findings
+
+
+def _adapter_domain_protocol(
+    rule: RuleDefinition, site_ctx: SiteContext,
+    page_contexts: list[PageContext], data: dict,
+) -> list[Finding]:
+    """Rule 6: unified domain + protocol."""
+    findings = []
+    if not site_ctx.https_redirects:
+        findings.append(_mk_finding(
+            rule, url=site_ctx.base_url,
+            detected="HTTP→HTTPS redirect not found",
+            expected="HTTP 301→ HTTPS",
+            evidence="https_redirect=False",
+            detail="HTTP to HTTPS redirect is missing or misconfigured",
+        ))
+    if site_ctx.www_redirects:
+        findings.append(_mk_finding(
+            rule, url=site_ctx.base_url,
+            detected="www/non-www redirect problem detected",
+            expected="Alternate host redirects to the single canonical domain",
+            evidence="www_redirect_problem=True",
+            detail="www/non-www redirect is missing or misconfigured",
+        ))
+    return findings
+
+
+def _adapter_redirect_chains(
+    rule: RuleDefinition, site_ctx: SiteContext,
+    page_contexts: list[PageContext], data: dict,
+) -> list[Finding]:
+    """Rule 7: redirect chain audit."""
+    findings = []
+    crawl = data.get("crawl", {})
+    redirects = crawl.get("redirects", []) if crawl else []
+
+    for redir in redirects:
+        chain = redir.get("chain", [])
+        if len(chain) > 1:
+            findings.append(_mk_finding(
+                rule, url=redir.get("source", ""),
+                detected=f"Redirect chain depth={len(chain)}",
+                expected="Direct (single-hop) redirects",
+                evidence=f"chain={chain}",
+                detail=f"Redirect chain of {len(chain)} hops: {' → '.join(chain)}",
+            ))
+    return findings
+
+
+def _adapter_canonical(
+    rule: RuleDefinition, site_ctx: SiteContext,
+    page_contexts: list[PageContext], data: dict,
+) -> list[Finding]:
+    """Rule 8: canonical correctness."""
+    findings = []
+    for ctx in page_contexts:
+        if ctx.status_code != 200:
+            continue
+        if not ctx.canonical_url:
+            findings.append(_mk_finding(
+                rule, url=ctx.url,
+                detected="No canonical URL",
+                expected="Self-referencing canonical URL",
+                evidence="canonical_url=None",
+                detail=f"Page missing canonical tag: {ctx.url}",
+            ))
+        elif ctx.canonical_url != ctx.url:
+            findings.append(_mk_finding(
+                rule, url=ctx.url,
+                detected=f"Non-self canonical: {ctx.canonical_url}",
+                expected=f"Self-canonical: {ctx.url}",
+                evidence=f"canonical={ctx.canonical_url}",
+                detail=f"Page canonical points to different URL: {ctx.canonical_url}",
+            ))
+    return findings
+
+
+def _adapter_click_depth(
+    rule: RuleDefinition, site_ctx: SiteContext,
+    page_contexts: list[PageContext], data: dict,
+) -> list[Finding]:
+    """Rule 9: click depth."""
+    findings = []
+    for ctx in page_contexts:
+        if ctx.depth > 4:
+            findings.append(_mk_finding(
+                rule, url=ctx.url,
+                detected=f"Depth={ctx.depth}",
+                expected="Depth ≤4 clicks from homepage",
+                evidence=f"depth={ctx.depth}",
+                detail=f"Deep page (depth {ctx.depth}): {ctx.url}",
+            ))
+    return findings
+
+
+def _adapter_internal_links(
+    rule: RuleDefinition, site_ctx: SiteContext,
+    page_contexts: list[PageContext], data: dict,
+) -> list[Finding]:
+    """Rule 11: internal link distribution."""
+    findings = []
+    for ctx in page_contexts:
+        if ctx.status_code != 200:
+            continue
+        raw = ctx._raw_export
+        outbound_known = raw is None or any(
+            key in raw for key in ("links_detailed", "internal_links")
+        )
+        inbound_known = raw is None or "linked_from" in raw
+        if outbound_known and ctx.internal_links_count == 0:
+            findings.append(_mk_finding(
+                rule, url=ctx.url,
+                detected="0 internal links",
+                expected="≥1 internal link from each page",
+                evidence="internal_links_count=0",
+                detail=f"Orphan page: {ctx.url} has zero internal links pointing out",
+            ))
+        if inbound_known and ctx.linked_from_count == 0:
+            findings.append(_mk_finding(
+                rule, url=ctx.url,
+                detected="0 inbound links",
+                expected="≥1 inbound link to each page",
+                evidence="linked_from_count=0",
+                detail=f"Orphan page: {ctx.url} has zero inbound links",
+            ))
+    return findings
+
+
+def _adapter_meta_description(
+    rule: RuleDefinition, site_ctx: SiteContext,
+    page_contexts: list[PageContext], data: dict,
+) -> list[Finding]:
+    """Rule 14: meta description audit."""
+    findings = []
+    for ctx in page_contexts:
+        if ctx.status_code != 200:
+            continue
+        if not ctx.meta_description or not ctx.meta_description.strip():
+            findings.append(_mk_finding(
+                rule, url=ctx.url,
+                detected="Missing meta description",
+                expected="Unique meta description 120-160 chars",
+                evidence="meta_description=None",
+                detail=f"Page missing meta description: {ctx.url}",
+            ))
+        elif len(ctx.meta_description) < 50:
+            findings.append(_mk_finding(
+                rule, url=ctx.url,
+                detected=f"Short meta description ({len(ctx.meta_description)} chars)",
+                expected="120-160 characters",
+                evidence=f"meta_description length={len(ctx.meta_description)}",
+                detail=f"Meta description too short ({len(ctx.meta_description)} chars): {ctx.url}",
+            ))
+    return findings
+
+
+def _adapter_h1_headings(
+    rule: RuleDefinition, site_ctx: SiteContext,
+    page_contexts: list[PageContext], data: dict,
+) -> list[Finding]:
+    """Rule 15: H1 heading hierarchy."""
+    findings = []
+    for ctx in page_contexts:
+        if ctx.status_code != 200:
+            continue
+        if not ctx.h1 or not ctx.h1.strip():
+            findings.append(_mk_finding(
+                rule, url=ctx.url,
+                detected="Missing H1",
+                expected="One unique H1 per page",
+                evidence="h1=None",
+                detail=f"Page missing H1 heading: {ctx.url}",
+            ))
+    return findings
+
+
+def _adapter_security_headers(
+    rule: RuleDefinition, site_ctx: SiteContext,
+    page_contexts: list[PageContext], data: dict,
+) -> list[Finding]:
+    """Rule 26: HSTS + security headers.
+
+    Checks response headers from page contexts. In Phase 1, these come
+    from LibreCrawl export data. Extended checks add the security header
+    audit into the data dict — we check both sources.
+    """
+    findings = []
+    # Check extended_checks output if available
+    extended = data.get("extended_checks", {})
+    security = extended.get("security_headers", {}) if extended else {}
+
+    # If extended_checks has security data, use it (authoritative)
+    if security:
+        if not security.get("hsts", False):
+            findings.append(_mk_finding(
+                rule, url=site_ctx.base_url,
+                detected="HSTS header missing",
+                expected="Strict-Transport-Security header present",
+                evidence="hsts=False",
+                detail="HSTS header not found — site may be vulnerable to SSL stripping",
+            ))
+        essential = ["x_frame_options", "x_content_type_options", "referrer_policy"]
+        missing = [h for h in essential if not security.get(h, False)]
+        if missing:
+            findings.append(_mk_finding(
+                rule, url=site_ctx.base_url,
+                detected=f"Missing headers: {', '.join(missing)}",
+                expected="All 5 essential security headers present",
+                evidence=f"missing={missing}",
+                detail=f"Missing security headers: {', '.join(missing)}",
+            ))
+        return findings
+
+    # Fallback: check response headers from PageContext
+    # Only report if we have actual header data (not lazy-load placeholder)
+    for ctx in page_contexts:
+        if ctx.status_code != 200:
+            continue
+        headers = ctx.response_headers
+        if headers is None:
+            continue  # No header data available — skip, don't false-positive
+
+        if "strict-transport-security" not in {k.lower() for k in headers}:
+            findings.append(_mk_finding(
+                rule, url=ctx.url,
+                detected="HSTS header missing",
+                expected="Strict-Transport-Security header present",
+                evidence="strict-transport-security not in response headers",
+                detail=f"HSTS header not found on {ctx.url}",
+            ))
+            break  # One finding per site is enough
+
+    return findings
+
+
+def _adapter_schema_coverage(
+    rule: RuleDefinition, site_ctx: SiteContext,
+    page_contexts: list[PageContext], data: dict,
+) -> list[Finding]:
+    """Rule 27: schema type coverage."""
+    findings = []
+    pages_with_schema = 0
+    schema_types: set[str] = set()
+    for ctx in page_contexts:
+        if ctx.json_ld_types:
+            pages_with_schema += 1
+            schema_types.update(ctx.json_ld_types)
+
+    total = len([p for p in page_contexts if p.status_code == 200])
+    if total > 0 and pages_with_schema / total < 0.3:
+        findings.append(_mk_finding(
+            rule, url=site_ctx.base_url,
+            detected=f"Schema on {pages_with_schema}/{total} pages",
+            expected="Structured data on ≥30% of pages",
+            evidence=f"schema_coverage={pages_with_schema}/{total}",
+            detail=f"Low schema coverage: {pages_with_schema}/{total} pages have structured data",
+        ))
+
+    return findings
+
+
+def _adapter_hreflang_basics(
+    rule: RuleDefinition, site_ctx: SiteContext,
+    page_contexts: list[PageContext], data: dict,
+) -> list[Finding]:
+    """Rule 29: hreflang basics (structural contract).
+
+    Evaluated per page that declares hreflang:
+      B. valid language codes             -> Warning
+      C. target URL validity              -> Warning
+      E. target indexability (noindex)    -> Warning
+      F. return-link reciprocity          -> Warning
+      G. self-reference presence          -> Opportunity
+      H. duplicate/conflicting lang value -> Warning
+      I. x-default                        -> Opportunity (never a hard FAIL)
+
+    Target status/indexability at Error level remain in Rule 58; Rule 29
+    records only the structural observations not covered elsewhere.
+    """
+    findings = []
+    pages_with_hreflang = sum(1 for p in page_contexts if p.hreflang_summary)
+    if pages_with_hreflang == 0:
+        # No hreflang on a single-lang site is fine — no finding
+        return findings
+
+    page_by_url = {
+        (ctx.url or "").rstrip("/").lower(): ctx for ctx in page_contexts
+    }
+    lang_pattern = re.compile(r"^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$")
+
+    for ctx in page_contexts:
+        if not ctx.hreflang_summary:
+            continue
+
+        url_key = (ctx.url or "").rstrip("/").lower()
+        entries = []
+        for entry in ctx.hreflang_summary:
+            if not isinstance(entry, dict):
+                continue
+            lang = str(entry.get("lang") or "").strip().lower()
+            target = str(entry.get("url") or "").strip()
+            if lang and target:
+                entries.append({"lang": lang, "target": target})
+
+        langs = [entry["lang"] for entry in entries]
+        lang_targets: dict[str, list[str]] = defaultdict(list)
+        for entry in entries:
+            lang_targets[entry["lang"]].append(entry["target"])
+
+        # I. x-default missing -> Opportunity (never a standalone FAIL)
+        if "x-default" not in langs:
+            findings.append(_mk_finding(
+                rule, url=ctx.url,
+                detected="Missing x-default hreflang",
+                expected="x-default hreflang annotation present",
+                evidence=f"langs={langs}",
+                detail=(
+                    f"Page has hreflang but missing x-default: {ctx.url}. "
+                    f"x-default routes non-matching locales; its absence is an "
+                    f"optimization opportunity, not a confirmed indexability failure."
+                ),
+                confidence=0.7,
+                severity="Opportunity",
+            ))
+
+        # B. invalid language code format
+        for lang in langs:
+            if lang != "x-default" and not lang_pattern.match(lang):
+                findings.append(_mk_finding(
+                    rule, url=ctx.url,
+                    detected=f"Invalid hreflang language code: {lang}",
+                    expected="BCP-47 language tag (e.g. en, de-DE)",
+                    evidence=f"lang={lang!r}",
+                    detail=f"hreflang on {ctx.url} uses invalid language code {lang!r}",
+                    confidence=0.9,
+                    severity="Warning",
+                ))
+
+        # C. target URL validity
+        for entry in entries:
+            target = entry["target"]
+            if not re.match(r"^https?://", target):
+                findings.append(_mk_finding(
+                    rule, url=ctx.url,
+                    detected=f"Invalid hreflang target URL: {target}",
+                    expected="Absolute http(s) URL",
+                    evidence=f"target={target!r}",
+                    detail=f"hreflang on {ctx.url} points to invalid target {target!r}",
+                    confidence=0.9,
+                    severity="Warning",
+                ))
+
+        # E. target indexability (Warning level; Rule 58 owns Error level)
+        for entry in entries:
+            target_ctx = page_by_url.get(entry["target"].rstrip("/").lower())
+            if target_ctx is not None and "noindex" in (target_ctx.robots or "").lower():
+                findings.append(_mk_finding(
+                    rule, url=ctx.url,
+                    detected=f"hreflang target is noindex: {entry['target']}",
+                    expected="All hreflang targets are indexable",
+                    evidence=f"hreflang_target_noindex={entry['target']}",
+                    detail=f"hreflang on {ctx.url} points to noindex page {entry['target']}",
+                    confidence=0.85,
+                    severity="Warning",
+                ))
+
+        # F. return-link reciprocity
+        for entry in entries:
+            target_ctx = page_by_url.get(entry["target"].rstrip("/").lower())
+            if target_ctx is None or not target_ctx.hreflang_summary:
+                continue
+            target_urls = {
+                str(item.get("url") or "").rstrip("/").lower()
+                for item in target_ctx.hreflang_summary
+                if isinstance(item, dict)
+            }
+            if url_key not in target_urls:
+                findings.append(_mk_finding(
+                    rule, url=ctx.url,
+                    detected=f"Missing reciprocal hreflang return link from {entry['target']}",
+                    expected="hreflang targets link back to this page",
+                    evidence=f"target={entry['target']}; missing_return_to={ctx.url}",
+                    detail=(
+                        f"hreflang on {ctx.url} points to {entry['target']} but that "
+                        f"page does not include a reciprocal hreflang entry back."
+                    ),
+                    confidence=0.8,
+                    severity="Warning",
+                ))
+
+        # G. self-reference presence
+        if url_key not in {
+            entry["target"].rstrip("/").lower() for entry in entries
+        }:
+            findings.append(_mk_finding(
+                rule, url=ctx.url,
+                detected="Missing self-referencing hreflang entry",
+                expected="Page declares its own URL+language in the hreflang set",
+                evidence=f"self_reference_absent=True; langs={langs}",
+                detail=f"Page {ctx.url} does not self-reference in its hreflang set",
+                confidence=0.7,
+                severity="Opportunity",
+            ))
+
+        # H. duplicate/conflicting language values
+        for lang, targets in lang_targets.items():
+            if len(set(targets)) > 1:
+                findings.append(_mk_finding(
+                    rule, url=ctx.url,
+                    detected=f"Conflicting hreflang values for language {lang}",
+                    expected="One target URL per language code",
+                    evidence=f"lang={lang}; targets={targets}",
+                    detail=(
+                        f"hreflang on {ctx.url} declares language {lang} with "
+                        f"multiple conflicting targets: {targets}"
+                    ),
+                    confidence=0.85,
+                    severity="Warning",
+                ))
+
+    return findings
+
+
+def _adapter_broken_links(
+    rule: RuleDefinition, site_ctx: SiteContext,
+    page_contexts: list[PageContext], data: dict,
+) -> list[Finding]:
+    """Rule 30: broken internal links."""
+    findings = []
+    for ctx in page_contexts:
+        if ctx.status_code >= 400:
+            if ctx.linked_from_count > 0:
+                findings.append(_mk_finding(
+                    rule, url=ctx.url,
+                    detected=f"Broken page ({ctx.status_code}) with {ctx.linked_from_count} inlinks",
+                    expected="All internal links resolve to 200",
+                    evidence=f"status={ctx.status_code}, linked_from={ctx.linked_from_count}",
+                    detail=f"Broken internal link target: {ctx.url} ({ctx.status_code}) referenced from {ctx.linked_from_count} pages",
+                ))
+
+    return findings
+
+
+def _adapter_soft_404(
+    rule: RuleDefinition, site_ctx: SiteContext,
+    page_contexts: list[PageContext], data: dict,
+) -> list[Finding]:
+    """Rule 41: soft 404 detection (thin/empty content)."""
+    findings = []
+    for ctx in page_contexts:
+        if ctx.status_code == 200 and ctx.word_count < 50:
+            findings.append(_mk_finding(
+                rule, url=ctx.url,
+                detected=f"Thin content: {ctx.word_count} words",
+                expected="≥300 words or proper 404 status code",
+                evidence=f"word_count={ctx.word_count}",
+                detail=f"Possible soft 404: {ctx.url} returns 200 but has only {ctx.word_count} words",
+            ))
+    return findings
+
+
+def _adapter_sitemap_indexability(
+    rule: RuleDefinition, site_ctx: SiteContext,
+    page_contexts: list[PageContext], data: dict,
+) -> list[Finding]:
+    """Rule 42: sitemap URL indexability consistency."""
+    findings = []
+    if not site_ctx.sitemap_found:
+        return findings  # Handled by Rule 2 (sitemap validity)
+
+    # Extract sitemap URLs from site data
+    sitemap_urls = set()
+    site_data = site_ctx._site_data or {}
+    sitemap = site_data.get("sitemap", {})
+    sitemap_url_list = sitemap.get("urls", []) or []
+
+    page_urls = {ctx.url for ctx in page_contexts}
+    for su in sitemap_url_list:
+        if su in page_urls:
+            ctx = next((c for c in page_contexts if c.url == su), None)
+            if ctx and ctx.status_code != 200:
+                findings.append(_mk_finding(
+                    rule, url=su,
+                    detected=f"Sitemap URL returns {ctx.status_code}",
+                    expected="All sitemap URLs return 200",
+                    evidence=f"sitemap_url_status={ctx.status_code}",
+                    detail=f"Sitemap contains broken URL: {su} returns {ctx.status_code}",
+                ))
+    return findings
+
+
+def _adapter_orphan_pages(
+    rule: RuleDefinition, site_ctx: SiteContext,
+    page_contexts: list[PageContext], data: dict,
+) -> list[Finding]:
+    """Rule 45: orphan candidates (zero HTML inbound links).
+
+    A page with zero inbound internal links is an ORPHAN_CANDIDATE even when
+    it is discovered via sitemap: sitemap discovery is not an internal link.
+    Severity is WARNING (candidate), not a hard failure; Rule 11 owns the
+    Error-level internal-link-distribution defect.
+    """
+    findings = []
+    for ctx in page_contexts:
+        if ctx.status_code != 200:
+            continue
+        if ctx.linked_from_count == 0:
+            findings.append(_mk_finding(
+                rule, url=ctx.url,
+                detected="Zero inbound internal links (orphan candidate)",
+                expected="Every page has at least one inbound internal link",
+                evidence=f"linked_from={ctx.linked_from_count}, internal_links={ctx.internal_links_count}",
+                detail=(
+                    f"Orphan candidate: {ctx.url} has zero inbound internal "
+                    f"links in the crawl HTML link graph. Sitemap membership "
+                    f"is not an internal link. Verify reachability from "
+                    f"category/home pages."
+                ),
+                confidence=0.7,
+                severity="Warning",
+            ))
+    return findings
+
+
+def _adapter_hreflang_indexability(
+    rule: RuleDefinition, site_ctx: SiteContext,
+    page_contexts: list[PageContext], data: dict,
+) -> list[Finding]:
+    """Rule 58: hreflang indexability (targets must be indexable)."""
+    findings = []
+    url_to_status = {ctx.url: ctx.status_code for ctx in page_contexts}
+    url_to_robots = {ctx.url: (ctx.robots or "").lower() for ctx in page_contexts}
+
+    for ctx in page_contexts:
+        if not ctx.hreflang_summary:
+            continue
+        for href in ctx.hreflang_summary:
+            target_url = href.get("url", "")
+            if not target_url:
+                continue
+            target_status = url_to_status.get(target_url)
+            target_robots = url_to_robots.get(target_url, "")
+
+            if target_status and target_status >= 400:
+                findings.append(_mk_finding(
+                    rule, url=ctx.url,
+                    detected=f"hreflang target {target_url} returns {target_status}",
+                    expected="All hreflang targets return 200",
+                    evidence=f"hreflang_target_status={target_status}",
+                    detail=f"hreflang on {ctx.url} points to broken URL: {target_url} ({target_status})",
+                ))
+            elif "noindex" in target_robots:
+                findings.append(_mk_finding(
+                    rule, url=ctx.url,
+                    detected=f"hreflang target {target_url} has noindex",
+                    expected="All hreflang targets are indexable",
+                    evidence="hreflang_target_noindex",
+                    detail=f"hreflang on {ctx.url} points to noindex page: {target_url}",
+                ))
+
+    return findings

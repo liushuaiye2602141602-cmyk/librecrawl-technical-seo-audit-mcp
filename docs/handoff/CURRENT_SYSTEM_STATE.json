@@ -1,0 +1,204 @@
+{
+  "generated_at": "2026-08-09T18:31:33+08:00",
+  "git_branch": "feat/master-audit-completion",
+  "git_head": "02e5e81e5ef6b3e3c15d19fbef824c1e9358e21c",
+  "git_commit_short": "02e5e81",
+  "verification_note": "Final verification rerun after the Rule 1 evidence-contract, replay credential, redirect-evidence, and artifact-provenance closure commits. Full regression, server compile, registry/provider/adapter integrity, tracked-JSON validation, and Compose config are green; GitHub Actions Offline validation passed for this HEAD on both push and Draft PR #1.",
+  "python": "3.14.5",
+  "tests": {
+    "collected": 771,
+    "passed": 771,
+    "failed": 0,
+    "skipped": 0
+  },
+  "rules": {
+    "total": 80,
+    "id_range": "1..80",
+    "duplicates": 0,
+    "missing": 0,
+    "classifications": {
+      "EXISTING_FULL": 18,
+      "EXISTING_PARTIAL": 54,
+      "NEW_EXTERNAL_DATA": 0,
+      "NEW_MANUAL": 8,
+      "NEW_AUTO": 0
+    },
+    "adapter_count": 72,
+    "partial_rules_without_adapters": 0,
+    "phase4a_completed_rules": [18, 32, 39, 43, 47, 51, 60, 67],
+    "phase4b_completed_rules": [74],
+    "phase4b_deferred_rules": []
+  },
+  "providers": {
+    "librecrawl": {
+      "status": "IMPLEMENTED",
+      "module": "audit_rules/providers/librecrawl_provider.py"
+    },
+    "snapshot_baseline": {
+      "status": "IMPLEMENTED",
+      "module": "audit_rules/snapshot.py"
+    },
+    "pagespeed": {
+      "status": "IMPLEMENTED",
+      "live_validated": true,
+      "note": "CLIENT_PROVIDER_AND_V3_PIPELINE_VALIDATED_2026_08_09",
+      "module": "audit_rules/providers/pagespeed_provider.py"
+    },
+    "gsc": {
+      "status": "IMPLEMENTED",
+      "live_validated": false,
+      "note": "OFFLINE_CONTRACT_VALIDATED; LIVE_VALIDATION_PENDING_GSC_OAUTH",
+      "module": "audit_rules/providers/gsc_provider.py",
+      "client_module": "audit_rules/providers/gsc_client.py",
+      "rules": [44, 52, 75, 76]
+    },
+    "semrush": {
+      "status": "IMPLEMENTED",
+      "live_validated": false,
+      "note": "OFFLINE_CONTRACT_VALIDATED; LIVE_VALIDATION_PENDING_PAID_V4_KEY",
+      "module": "audit_rules/providers/semrush_provider.py",
+      "client_module": "audit_rules/providers/semrush_client.py",
+      "rules": [31, 77]
+    },
+    "ga4": {
+      "status": "IMPLEMENTED",
+      "live_validated": false,
+      "note": "OFFLINE_CONTRACT_VALIDATED; LIVE_VALIDATION_PENDING_GA4_OAUTH",
+      "module": "audit_rules/providers/ga4_provider.py",
+      "client_module": "audit_rules/providers/ga4_client.py",
+      "rules": [34, 35]
+    },
+    "server_logs": {
+      "status": "IMPLEMENTED",
+      "input_validated": false,
+      "note": "FORMATS_AND_RULES_VALIDATED; REAL_LOG_INPUT_PENDING",
+      "module": "audit_rules/providers/server_log_provider.py",
+      "rules": [5, 33]
+    },
+    "wordpress_privileged": {
+      "status": "IMPLEMENTED",
+      "input_validated": false,
+      "note": "SCHEMA_PRIVACY_AND_RULES_VALIDATED; REAL_ADMIN_SNAPSHOT_PENDING",
+      "module": "audit_rules/providers/wordpress_privileged_provider.py",
+      "rules": [36, 64, 65, 68, 69]
+    },
+    "render_snapshot": {
+      "status": "IMPLEMENTED",
+      "input_validated": false,
+      "note": "SCHEMA_PRIVACY_AND_RULES_VALIDATED; REAL_BROWSER_SUMMARY_PENDING",
+      "module": "audit_rules/providers/render_snapshot_provider.py",
+      "rules": [46, 48]
+    },
+    "availability_snapshot": {
+      "status": "IMPLEMENTED",
+      "input_validated": false,
+      "note": "SCHEMA_PRIVACY_AND_RULE_VALIDATED; REAL_MONITORING_SUMMARY_PENDING",
+      "module": "audit_rules/providers/availability_snapshot_provider.py",
+      "rules": [80]
+    },
+    "manual_review": {
+      "status": "IMPLEMENTED",
+      "input_validated": true,
+      "note": "HOST_BOUND_GENERATE_VALIDATE_INGEST_COVERAGE_LOOP",
+      "module": "audit_rules/providers/manual_review_provider.py",
+      "rules": [53, 54, 55, 56, 57, 71, 72, 73]
+    }
+  },
+  "artifacts": {
+    "legacy": "server.py _build_report() outputs",
+    "coverage": {"status": "IMPLEMENTED", "file": "coverage.csv"},
+    "tasks": {"status": "IMPLEMENTED", "file": "master-audit-tasks.csv"},
+    "performance": {"status": "IMPLEMENTED", "file": "performance.csv"},
+    "manual_review": {
+      "status": "IMPLEMENTED",
+      "file": "<domain>-<timestamp>.manual-review.md",
+      "registry_driven_rule_count": 8,
+      "parser": "audit_rules.manual_review.parse_manual_review"
+    },
+    "snapshot_diff": {
+      "status": "IMPLEMENTED",
+      "snapshot_file": "*.audit-snapshot-v1.json.gz",
+      "diff_file": "*.crawl-diff.csv"
+    },
+    "audit_score": {"status": "IMPLEMENTED", "file": "audit-score.json"},
+    "enhanced_reports": {"status": "IMPLEMENTED", "files": ["master-audit.md", "master-audit.pdf"]},
+    "external_evidence": {"status": "IMPLEMENTED", "files": ["search-performance.csv", "backlinks.csv", "server-log-analysis.csv", "ga4-audit.json", "wordpress-audit.json", "render-audit.json", "availability-audit.json"]}
+  },
+  "feature_flags": {
+    "MASTER_AUDIT_V3_ENABLED": {
+      "default": "false",
+      "desc": "Master gate for V3 80-rule pipeline"
+    },
+    "MASTER_AUDIT_PSI_ENABLED": {
+      "default": "true",
+      "desc": "Enable PSI provider within V3"
+    },
+    "MASTER_AUDIT_GSC_ENABLED": {
+      "default": "true",
+      "desc": "Enable GSC provider within V3 when OAuth configuration exists"
+    },
+    "GSC_ACCESS_TOKEN": {"default": "", "desc": "Short-lived OAuth 2.0 bearer token"},
+    "GSC_SITE_URL": {"default": "", "desc": "Exact Search Console property"},
+    "GSC_INSPECTION_LIMIT": {"default": "20", "desc": "Bounded URL Inspection sample"},
+    "GSC_ANALYTICS_MAX_ROWS": {"default": "50000", "desc": "Rows per 28-day window"},
+    "MASTER_AUDIT_SEMRUSH_ENABLED": {"default": "true", "desc": "Enable Semrush provider within V3"},
+    "SEMRUSH_API_KEY": {"default": "", "desc": "Semrush paid Backlinks v4 and Standard Analytics key"},
+    "SEMRUSH_TARGET": {"default": "audit hostname", "desc": "Optional root-domain target"},
+    "SEMRUSH_LOST_LINK_LIMIT": {"default": "100", "desc": "Bounded paid lost-link rows"},
+    "SEMRUSH_REFERRING_DOMAIN_LIMIT": {"default": "100", "desc": "Bounded paid referring-domain rows"},
+    "SEMRUSH_DATABASE": {"default": "us", "desc": "Regional domain-keyword database"},
+    "SEMRUSH_KEYWORD_LIMIT": {"default": "100", "desc": "Bounded domain keyword/position rows"},
+    "SEMRUSH_COMPETITOR_LIMIT": {"default": "25", "desc": "Bounded organic competitor rows"},
+    "MASTER_AUDIT_GA4_ENABLED": {"default": "true", "desc": "Enable GA4 provider within V3"},
+    "GA4_ACCESS_TOKEN": {"default": "", "desc": "Short-lived analytics.readonly OAuth token"},
+    "GA4_PROPERTY_ID": {"default": "", "desc": "GA4 property identifier"},
+    "MASTER_AUDIT_SERVER_LOGS_ENABLED": {"default": "true", "desc": "Enable local access-log provider"},
+    "SERVER_LOG_PATH": {"default": "", "desc": "Explicit read-only access-log file"},
+    "SERVER_LOG_SITE_HOST": {"default": "", "desc": "Required exact audited hostname manifest"},
+    "SERVER_LOG_MAX_LINES": {"default": "1000000", "desc": "Streaming line cap"},
+    "MASTER_AUDIT_MANUAL_REVIEW_ENABLED": {"default": "true", "desc": "Enable completed manual review ingestion"},
+    "MANUAL_REVIEW_INPUT_PATH": {"default": "", "desc": "Read-only completed host-bound manual review Markdown"},
+    "MASTER_AUDIT_WORDPRESS_ENABLED": {"default": "false", "desc": "Enable local WordPress snapshot provider"},
+    "WP_AUDIT_EXPORT_PATH": {"default": "", "desc": "Read-only wordpress-audit-v1 JSON path"},
+    "WP_AUDIT_MAX_AGE_HOURS": {"default": "168", "desc": "Maximum accepted snapshot age"},
+    "MASTER_AUDIT_RENDER_ENABLED": {"default": "false", "desc": "Enable rendered summary provider"},
+    "JS_RENDER_AUDIT_PATH": {"default": "", "desc": "Read-only render-audit-v1 JSON path"},
+    "JS_RENDER_MAX_AGE_HOURS": {"default": "168", "desc": "Maximum rendered summary age"},
+    "MASTER_AUDIT_AVAILABILITY_ENABLED": {"default": "false", "desc": "Enable availability summary provider"},
+    "AVAILABILITY_AUDIT_PATH": {"default": "", "desc": "Read-only availability-monitor-v1 JSON path"},
+    "AVAILABILITY_MAX_AGE_HOURS": {"default": "24", "desc": "Maximum monitoring export age"},
+    "PAGESPEED_API_KEY": {"default": "", "desc": "Google PSI API key"},
+    "PSI_SAMPLE_LIMIT": {"default": "20", "desc": "Max URLs for PSI per session"},
+    "PSI_STRATEGIES": {
+      "default": "mobile",
+      "desc": "PSI strategies: mobile or mobile,desktop"
+    },
+    "AUDIT_SNAPSHOT_BASELINE_PATH": {
+      "default": "",
+      "desc": "Optional portable Rule 74 baseline snapshot"
+    },
+    "AUDIT_SNAPSHOT_OUTPUT_DIR": {
+      "default": "REPORTS_DIR",
+      "desc": "Optional persistent snapshot and diff output directory"
+    }
+  },
+  "known_credentials": {
+    "PAGESPEED_API_KEY": true,
+    "GSC_OAUTH": false,
+    "SEMRUSH_API_KEY": false,
+    "GA4_PROPERTY": false,
+    "SERVER_LOG_PATH": false,
+    "WP_ADMIN_SNAPSHOT": false,
+    "RENDER_BROWSER_SNAPSHOT": false,
+    "AVAILABILITY_MONITOR_SNAPSHOT": false
+  },
+  "live_validations_pending": [
+    "GSC_OAUTH_PROPERTY_VALIDATION",
+    "SEMRUSH_V4_AND_ANALYTICS_PAID_KEY_VALIDATION",
+    "GA4_OAUTH_PROPERTY_VALIDATION",
+    "REAL_SERVER_LOG_INPUT_VALIDATION",
+    "REAL_WORDPRESS_ADMIN_SNAPSHOT_VALIDATION",
+    "REAL_RENDER_BROWSER_SNAPSHOT_VALIDATION",
+    "REAL_AVAILABILITY_MONITOR_SNAPSHOT_VALIDATION"
+  ]
+}

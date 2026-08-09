@@ -130,7 +130,7 @@ You never call tools by hand — the agent picks them. See **[TOOLS.md](TOOLS.md
 
 ## Where the report goes
 
-Each audit produces a single zip (8 files): `SUMMARY.txt`, a branded PDF, its Markdown source, and 5 CSVs (`per-page`, `sitemap-recon`, `external-links`, `content-audit`, `extended-checks`).
+Each audit preserves the 8 legacy zip files: `SUMMARY.txt`, a branded PDF, its Markdown source, and 5 CSVs (`per-page`, `sitemap-recon`, `external-links`, `content-audit`, `extended-checks`). When V3 is enabled, the same zip also includes 80-rule coverage, remediation tasks, score, portable snapshot/diff, manual review, collected provider evidence, and enhanced Markdown/PDF reports.
 
 - **Docker:** written to `./reports` in the repo.
 - **Manual / installer:** written to `REPORTS_DIR` (default `~/librecrawl-reports`).
