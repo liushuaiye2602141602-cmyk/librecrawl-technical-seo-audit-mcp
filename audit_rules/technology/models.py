@@ -1,0 +1,216 @@
+"""Technology Intelligence data contracts.
+
+Status semantics:
+  DETECTED     — sufficient evidence supports the technology.
+  NOT_DETECTED — no supporting evidence observed; this never means the site
+                 definitely lacks the technology.
+  UNKNOWN      — insufficient data / collection capability / conflict.
+  CONFLICTING  — multiple credible mutually-exclusive judgments.
+
+Confidence: client display High/Medium/Low; internal score 0.00–1.00.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Optional
+
+
+SCHEMA_VERSION = "technology-profile-v1"
+DETECTOR_VERSION = "1.0.0"
+SIGNATURE_REGISTRY_VERSION = "1.0.0"
+
+
+class DetectionStatus(str, Enum):
+    DETECTED = "DETECTED"
+    NOT_DETECTED = "NOT_DETECTED"
+    UNKNOWN = "UNKNOWN"
+    CONFLICTING = "CONFLICTING"
+
+
+def status_wording(status: str) -> str:
+    """Client-safe wording; NOT_DETECTED never claims definite absence."""
+    mapping = {
+        "DETECTED": "Detected with sufficient observable evidence.",
+        "NOT_DETECTED": (
+            "Not detected from the available observable evidence; this does "
+            "not prove the technology is absent."
+        ),
+        "UNKNOWN": (
+            "Unknown: cannot be reliably determined from the available "
+            "evidence or current collection capability."
+        ),
+        "CONFLICTING": (
+            "Multiple credible signals conflict; confidence is reduced and "
+            "the conflict is reported."
+        ),
+    }
+    return mapping.get(status, "Unknown status.")
+
+
+@dataclass(frozen=True)
+class TechnologyEvidence:
+    """One structured detection signal."""
+
+    signal_type: str
+    signal_value: str
+    source_url: str
+    source_scope: str  # single_page | multi_page | site_level
+    strength: str      # strong | medium | weak
+    provenance: str = "local_crawl"  # local_crawl | external_api
+
+
+_STRENGTH_SCORE = {"strong": 0.85, "medium": 0.65, "weak": 0.45}
+
+
+def _conflicts(signals: list[TechnologyEvidence]) -> bool:
+    """True when signals of the same type carry mutually exclusive values."""
+    groups: dict[str, set[str]] = {}
+    for signal in signals:
+        groups.setdefault(signal.signal_type, set()).add(
+            signal.signal_value.strip().lower())
+    return any(len(values) > 1 for values in groups.values())
+
+
+def aggregate_confidence(
+    signals: list[TechnologyEvidence],
+) -> tuple[float, bool]:
+    """Aggregate evidence into (confidence_score, is_conflicting)."""
+    if not signals:
+        return 0.0, False
+    conflicting = _conflicts(signals)
+    if conflicting:
+        return 0.3, True
+    scores = [_STRENGTH_SCORE.get(s.strength, 0.4) for s in signals]
+    strong_count = sum(1 for s in scores if s >= 0.85)
+    if strong_count >= 2:
+        return 0.92, False
+    if strong_count == 1:
+        return 0.8, False
+    return max(scores) - 0.1, False
+
+
+def confidence_label(score: float) -> str:
+    if score >= 0.8:
+        return "High"
+    if score >= 0.5:
+        return "Medium"
+    return "Low"
+
+
+@dataclass
+class TechnologyDetection:
+    """One detected (or explicitly not detected) technology."""
+
+    category: str
+    technology_name: str
+    technology_type: str
+    detection_sources: list[TechnologyEvidence]
+    status: str = DetectionStatus.DETECTED.value
+    version: str = "Unknown"
+    confidence: str = "Low"
+    confidence_score: float = 0.0
+    first_seen_urls: list[str] = field(default_factory=list)
+    affected_urls: list[str] = field(default_factory=list)
+    is_observation: bool = True
+    is_risk: bool = False
+    risk_level: Optional[str] = None
+    risk_reason: str = ""
+    mapped_audit_ids: list[int] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
+    external_enrichment: dict[str, Any] = field(default_factory=dict)
+    conflicting_signals: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not self.detection_sources:
+            raise ValueError("technology detection requires evidence")
+        if not self.confidence_score:
+            score, conflicting = aggregate_confidence(self.detection_sources)
+            self.confidence_score = round(score, 2)
+            self.confidence = confidence_label(self.confidence_score)
+            if conflicting:
+                self.status = DetectionStatus.CONFLICTING.value
+                self.conflicting_signals = [
+                    f"{s.signal_type}={s.signal_value}" for s in self.detection_sources
+                ]
+
+
+@dataclass
+class TechnologyProfile:
+    """Site-level technology profile."""
+
+    schema_version: str = SCHEMA_VERSION
+    detector_version: str = DETECTOR_VERSION
+    signature_registry_version: str = SIGNATURE_REGISTRY_VERSION
+    source_url: str = ""
+    generated_at: str = ""
+    git_head: str = ""
+    detections: list[TechnologyDetection] = field(default_factory=list)
+    detection_status: str = "COMPLETE"
+    detection_reason: str = ""
+    limitations: list[str] = field(default_factory=list)
+    external_enrichment: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def category_summary(self) -> dict[str, list[str]]:
+        summary: dict[str, list[str]] = {}
+        for detection in self.detections:
+            if detection.status == DetectionStatus.DETECTED.value:
+                summary.setdefault(detection.category, []).append(
+                    detection.technology_name)
+        return summary
+
+
+@dataclass
+class TechnologyRisk:
+    """Correlation of a confirmed observation to existing audits."""
+
+    technology: str
+    observation: TechnologyDetection
+    classification: str  # CONFIRMED_OBSERVATION | RISK_CANDIDATE | NO_RISK
+    mapped_audit_ids: list[int] = field(default_factory=list)
+    impact: str = ""
+    recommended_action: str = ""
+
+
+def build_profile(
+    detections: list[TechnologyDetection],
+    *,
+    detector_version: str,
+    signature_registry_version: str,
+    source_url: str,
+    git_head: str,
+    generated_at: str = "",
+    detection_status: str = "COMPLETE",
+    detection_reason: str = "",
+    limitations: Optional[list[str]] = None,
+    external_enrichment: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """Build a serializable TechnologyProfile dict."""
+    profile = TechnologyProfile(
+        detector_version=detector_version,
+        signature_registry_version=signature_registry_version,
+        source_url=source_url,
+        generated_at=generated_at,
+        git_head=git_head,
+        detections=detections,
+        detection_status=detection_status,
+        detection_reason=detection_reason,
+        limitations=limitations or [],
+        external_enrichment=external_enrichment or {},
+    )
+    return {
+        "schema_version": profile.schema_version,
+        "detector_version": profile.detector_version,
+        "signature_registry_version": profile.signature_registry_version,
+        "source_url": profile.source_url,
+        "generated_at": profile.generated_at,
+        "git_head": profile.git_head,
+        "detections": [d.__dict__ for d in profile.detections],
+        "category_summary": profile.category_summary,
+        "detection_status": profile.detection_status,
+        "detection_reason": profile.detection_reason,
+        "limitations": profile.limitations,
+        "external_enrichment": profile.external_enrichment,
+    }
