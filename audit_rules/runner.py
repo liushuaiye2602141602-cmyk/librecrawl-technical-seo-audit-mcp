@@ -195,6 +195,9 @@ class RuleRunner:
             evaluated_overrides[2] = 1
         if any(getattr(p, "word_count", None) is not None for p in page_contexts):
             evaluated_overrides[16] = eligible_pages
+        # Rule 13 crawl-layer title scan evaluates every eligible page; the
+        # GSC/Semrush search-intent layer is what makes the rule partial.
+        evaluated_overrides[13] = eligible_pages
 
         # Step 6: Compute coverage matrix
         mgr = CoverageManager(self.registry)

@@ -25,7 +25,7 @@
 ## Artifact hashes
 
 - `01_80_Item_Master_SEO_Diagnostic_Report.html`: `71b92059fe46804171841b5feaeb47e2e81f10b01baa202ed20fcf275ad8f580`
-- `01_80_Item_Master_SEO_Diagnostic_Report.pdf`: `a3e1da961a02154568bdd58feaa55d0213bbf0ee78784a8a6d2102fc6a53b78c`
+- `01_80_Item_Master_SEO_Diagnostic_Report.pdf`: `598711fe293b31848acac78f0e65e671606eea28fc8714db9e6ae23990ae9ba6`
 - `02_80_Item_Master_SEO_Diagnostic_Report.md`: `2a3513ede20fbc2b50b920a33e1b6f173d887e8fac0cca93aa0972aed46dc7bb`
 - `03_80_Item_Diagnostic_Matrix.csv`: `21fb604c2453f79a6e0359d54b472c88651461e9d4246c9ab52eef99400033a3`
 - `04_Detailed_URL_Findings.csv`: `f4da632c4310d2b065224a4474fba19f5705c80613ac5027d1e20dc2d4eb5da4`
@@ -33,8 +33,8 @@
 - `06_Manual_Review.csv`: `462b837022f57b7378d934c80a4c3f061470fe020363477fb74d31d2bfa616c4`
 - `07_Performance_Data.csv`: `acaaaf266a6cf1ed34cf24da6c4630126d1bf1a964c25658e65b258335702e26`
 - `08_Audit_Score.json`: `6b25648b85e6c8fa9ffe1aaa26a95d26bc0fc679f3a9298e16254b0d05228e73`
-- `09_80_Rule_Coverage.csv`: `4cfa995439a7cd81e5736e9d58a8940e2eaedfbe80c161b541fa22735d6e940d`
-- `80_Item_Diagnostic_Data.xlsx`: `5613452f7438e4bf3203b4aaba03188d26fa0b3c03213be98bb49e263e4e891a`
+- `09_80_Rule_Coverage.csv`: `aeca3fdde4d947b6e413b94555bc9309b3c819c12b47a91c0f42821aec8c8d7d`
+- `80_Item_Diagnostic_Data.xlsx`: `4556fac1da84ffb61eb9eb1e57659b4f230f658947b5e9e70078311c0cb7316f`
 - `metrics.json`: `c51247da5f30d618b33dc2f1abc14ee3357097cc41a6b7389768fc4e022689ba`
 - `README.txt`: `5c8e3587d6a26a1b8b9c3eeb28b95b34a2991361eb0ea82777fa10a02accd1a7`
 - `Technical_Appendix\01_audit-replay-v1.json.gz`: `f38e2a45047107d80b644014770123a9855eb5a45762ae044d80e085ae39424f`
