@@ -68,7 +68,7 @@ violates the operator's stated privacy contract.
 
 # What the audit produces
 
-A single zip with 8 files:
+A single zip with the 8 legacy files plus enabled V3 artifacts:
   - SUMMARY.txt — orientation
   - <domain>-<ts>.pdf — branded human-readable report (PDF)
   - <domain>-<ts>.md  — Markdown source
@@ -77,6 +77,9 @@ A single zip with 8 files:
   - <domain>-<ts>.external-links.csv — every outbound URL HEAD-validated
   - <domain>-<ts>.content-audit.csv — readability, AI-tells, punctuation
   - <domain>-<ts>.extended-checks.csv — 50+ technical SEO findings
+
+When V3 is enabled the zip also includes 80-rule coverage, remediation tasks,
+score, snapshots/diff, manual review, provider evidence, and enhanced reports.
 
 The PDF report surfaces the Summary scorecard (with external-link counts),
 a Critical section with broken pages + broken external links + duplicate
@@ -3230,6 +3233,51 @@ def librecrawl_audit_artifacts(session_id: str) -> dict:
         "session_id":  session_id,
         "artifacts":   {a["kind"]: a["path"] for a in arts},
         "size_bytes":  {a["kind"]: a["size_bytes"] for a in arts},
+    }
+
+
+@mcp.tool()
+def librecrawl_master_audit_status(session_id: str) -> dict:
+    """Return score, 80-rule coverage, manual/task/provider, snapshot, and artifact status."""
+    from audit_rules.mcp_status import build_master_audit_status
+
+    session = _state.get_session(session_id)
+    if not session:
+        return {"success": False, "error": f"Unknown session_id: {session_id}"}
+    return build_master_audit_status(
+        session, _state.list_artifacts(session_id),
+        _state.recent_events(session_id, n=200))
+
+
+@mcp.tool()
+def librecrawl_snapshot_diff(session_id_before: str, session_id_after: str,
+                             max_changes: int = 500) -> dict:
+    """Compare two registered portable audit snapshots without depending on crawl IDs."""
+    from audit_rules.snapshot import load_snapshot
+    from audit_rules.snapshot_diff import diff_snapshots
+
+    def snapshot_path(session_id: str) -> str | None:
+        for artifact in _state.list_artifacts(session_id):
+            if artifact["kind"] == "audit_snapshot":
+                return artifact["path"]
+        return None
+
+    before_path = snapshot_path(session_id_before)
+    after_path = snapshot_path(session_id_after)
+    if not before_path or not after_path:
+        return {"success": False, "error": "Both sessions require an audit_snapshot artifact"}
+    limit = max(1, min(int(max_changes), 5000))
+    try:
+        changes = diff_snapshots(load_snapshot(before_path), load_snapshot(after_path))
+    except (OSError, ValueError) as exc:
+        return {"success": False, "error": f"Snapshot validation failed: {type(exc).__name__}"}
+    return {
+        "success": True,
+        "session_id_before": session_id_before,
+        "session_id_after": session_id_after,
+        "change_count": len(changes),
+        "truncated": len(changes) > limit,
+        "changes": [change.to_dict() for change in changes[:limit]],
     }
 
 
