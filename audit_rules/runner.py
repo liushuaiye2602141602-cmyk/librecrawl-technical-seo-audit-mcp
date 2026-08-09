@@ -40,6 +40,7 @@ class RuleRunner:
     registry: list[RuleDefinition]
     providers: dict[str, DataProvider] = field(default_factory=dict)
     harness: Optional[CompatibilityHarness] = None
+    last_shared_data: dict = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self):
         if self.harness is None:
@@ -166,6 +167,8 @@ class RuleRunner:
             not_checked_reasons=self.harness.not_checked_reasons,
             manual_outcomes=manual_outcomes,
         )
+
+        self.last_shared_data = dict(existing_data)
 
         return findings, coverage_rows
 

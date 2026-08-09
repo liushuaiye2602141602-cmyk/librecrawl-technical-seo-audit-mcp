@@ -143,6 +143,34 @@ def _write_master_report_artifacts(
     return {"master_report_md": md_path, "master_report_pdf": pdf_path}
 
 
+def _write_external_evidence_artifacts(
+    sid: str,
+    shared_data: dict,
+    domain: str,
+    timestamp: str,
+    reports_dir: Path,
+) -> dict[str, Path]:
+    """Write collected provider evidence in portable CSV/JSON formats."""
+    from audit_rules.external_artifacts import build_external_artifacts
+
+    suffixes = {
+        "search_performance_csv": "search-performance.csv",
+        "backlinks_csv": "backlinks.csv",
+        "server_log_analysis_csv": "server-log-analysis.csv",
+        "wordpress_audit_json": "wordpress-audit.json",
+        "ga4_audit_json": "ga4-audit.json",
+        "render_audit_json": "render-audit.json",
+        "availability_audit_json": "availability-audit.json",
+    }
+    output = {}
+    for kind, content in build_external_artifacts(shared_data).items():
+        path = Path(reports_dir) / f"{domain}-{timestamp}.{suffixes[kind]}"
+        path.write_text(content, encoding="utf-8")
+        state.add_artifact(sid, kind, path)
+        output[kind] = path
+    return output
+
+
 def _prepare_snapshot_artifacts(
     sid: str,
     export_data: dict,
@@ -677,6 +705,17 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
                     })
                 except Exception as exc:
                     _record_v3_artifact_failure(sid, "summary_artifacts", exc)
+
+                try:
+                    from audit_rules.integration import _get_runner
+                    evidence_paths = _write_external_evidence_artifacts(
+                        sid, _get_runner().last_shared_data, domain, timestamp,
+                        REPORTS_DIR)
+                    state.log_event(sid, "v3_external_artifacts_generated", {
+                        "artifacts": sorted(evidence_paths),
+                    })
+                except Exception as exc:
+                    _record_v3_artifact_failure(sid, "external_artifacts", exc)
 
                 try:
                     report_paths = _write_master_report_artifacts(
