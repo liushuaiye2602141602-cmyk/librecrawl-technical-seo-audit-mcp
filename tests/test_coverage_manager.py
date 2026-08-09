@@ -239,6 +239,36 @@ class TestCoverageStateSemantics:
         assert r5.result_status == ResultStatus.UNKNOWN
         assert "GSC API" in r5.not_checked_reason
 
+    def test_completed_local_adapter_with_findings_and_missing_provider_is_partial(
+        self, mini_registry, sample_site_ctx, sample_page_contexts
+    ):
+        """Production findings cannot coexist with NOT_CHECKED/evaluated=0."""
+        from audit_rules.coverage import CoverageManager
+        from audit_rules.models import Finding
+        from audit_rules.categories import ExecutionStatus, ResultStatus
+
+        finding = Finding(
+            audit_id=5, rule_id="crawl_budget_waste",
+            url="https://example.com", category="抓取与索引",
+            priority="High", severity="Warning", finding_type="Warning",
+            scope="SITE", evidence="Local crawl trap evidence",
+        )
+
+        rows = CoverageManager(mini_registry).compute(
+            sample_site_ctx,
+            sample_page_contexts,
+            [finding],
+            providers_available={"LibreCrawl"},
+            executed_rule_ids={5},
+        )
+        row = next(row for row in rows if row.audit_id == 5)
+
+        assert row.execution_status == ExecutionStatus.EXECUTED_PARTIAL
+        assert row.result_status == ResultStatus.WARNING
+        assert row.evaluated_count == 1
+        assert row.finding_count == 1
+        assert "GSC API" in row.not_checked_reason
+
     def test_case_c_partial_with_all_providers(self, mini_registry, sample_site_ctx, sample_page_contexts):
         """CASE C variant: EXISTING_PARTIAL with all providers available → fully executed."""
         from audit_rules.coverage import CoverageManager

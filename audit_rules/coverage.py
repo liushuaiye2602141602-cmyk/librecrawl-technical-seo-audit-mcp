@@ -154,14 +154,35 @@ class CoverageManager:
                 f"Manual review required: {rule.owner or 'seo'}",
             )
 
-        # Case D: Missing external data provider
-        for src in rule.required_data_sources:
-            if src != "LibreCrawl" and src not in providers_available:
+        # Case D/C: Missing external data provider. If a registered local
+        # adapter actually ran and produced evidence, retain those findings as
+        # EXECUTED_PARTIAL instead of contradicting them with NOT_CHECKED/0.
+        missing_sources = [
+            src for src in rule.required_data_sources
+            if src != "LibreCrawl" and src not in providers_available
+        ]
+        if missing_sources:
+            reason = f"Data source unavailable: {', '.join(missing_sources)}"
+            adapter_completed = (
+                executed_rule_ids is not None
+                and rule.audit_id in executed_rule_ids
+            )
+            evidence_from_available_source = any(
+                finding.data_source == "LibreCrawl"
+                or finding.data_source in providers_available
+                for finding in findings
+            )
+            if findings and adapter_completed and evidence_from_available_source:
                 return (
-                    ExecutionStatus.NOT_CHECKED,
-                    ResultStatus.UNKNOWN,
-                    f"Data source unavailable: {src}",
+                    ExecutionStatus.EXECUTED_PARTIAL,
+                    self._derive_result_from_findings(findings),
+                    reason,
                 )
+            return (
+                ExecutionStatus.NOT_CHECKED,
+                ResultStatus.UNKNOWN,
+                reason,
+            )
 
         if executed_rule_ids is not None and rule.audit_id not in executed_rule_ids:
             return (
