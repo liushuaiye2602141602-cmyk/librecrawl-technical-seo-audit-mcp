@@ -35,7 +35,19 @@ services:
       - REPORTS_DIR=/reports
       - LIBRECRAWL_UPSTREAM_DB=/librecrawl-data/users.db
       - PAGESPEED_API_KEY=${PAGESPEED_API_KEY:-}
+      - AUDIT_FETCH_TIMEOUT_SECONDS=${AUDIT_FETCH_TIMEOUT_SECONDS:-20}
+      - AUDIT_FETCH_WORKERS=${AUDIT_FETCH_WORKERS:-4}
+      - AUDIT_EXTERNAL_FETCH_WORKERS=${AUDIT_EXTERNAL_FETCH_WORKERS:-8}
+      - AUDIT_FETCH_DELAY_MS=${AUDIT_FETCH_DELAY_MS:-500}
+      - AUDIT_CONTENT_SAMPLE_LIMIT=${AUDIT_CONTENT_SAMPLE_LIMIT:-500}
+      - AUDIT_EXTENDED_SAMPLE_LIMIT=${AUDIT_EXTENDED_SAMPLE_LIMIT:-500}
+      - AUDIT_FILL_SITEMAP_ORPHANS=${AUDIT_FILL_SITEMAP_ORPHANS:-true}
+      - AUDIT_REPORT_PDF_ENABLED=${AUDIT_REPORT_PDF_ENABLED:-true}
+      - AUDIT_MASTER_REPORT_ENABLED=${AUDIT_MASTER_REPORT_ENABLED:-true}
       - MASTER_AUDIT_V3_ENABLED=${MASTER_AUDIT_V3_ENABLED:-false}
+      - MASTER_AUDIT_PSI_ENABLED=${MASTER_AUDIT_PSI_ENABLED:-true}
+      - PSI_SAMPLE_LIMIT=${PSI_SAMPLE_LIMIT:-20}
+      - PSI_STRATEGIES=${PSI_STRATEGIES:-mobile}
       - MASTER_AUDIT_GSC_ENABLED=${MASTER_AUDIT_GSC_ENABLED:-true}
       - GSC_ACCESS_TOKEN=${GSC_ACCESS_TOKEN:-}
       - GSC_SITE_URL=${GSC_SITE_URL:-}
@@ -63,9 +75,14 @@ services:
       - MASTER_AUDIT_AVAILABILITY_ENABLED=${MASTER_AUDIT_AVAILABILITY_ENABLED:-false}
       - AVAILABILITY_AUDIT_PATH=${AVAILABILITY_AUDIT_PATH:-}
       - AVAILABILITY_MAX_AGE_HOURS=${AVAILABILITY_MAX_AGE_HOURS:-24}
+      - AUDIT_SNAPSHOT_BASELINE_PATH=${AUDIT_SNAPSHOT_BASELINE_PATH:-}
+      - AUDIT_SNAPSHOT_OUTPUT_DIR=${AUDIT_SNAPSHOT_OUTPUT_DIR:-/snapshots}
     volumes:
       - ./reports:/reports
       - librecrawl-data:/librecrawl-data:ro
+      # Portable snapshots survive container recreation independently of
+      # ephemeral audit sessions. Export/download remains available via MCP.
+      - audit-snapshots:/snapshots
     ports:
       # Bound to loopback by default — expose deliberately on a trusted host only.
       - "127.0.0.1:5081:5081"
@@ -73,3 +90,4 @@ services:
 
 volumes:
   librecrawl-data:
+  audit-snapshots:

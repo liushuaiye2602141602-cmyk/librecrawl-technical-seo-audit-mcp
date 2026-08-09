@@ -1,6 +1,6 @@
 # Tools Reference
 
-The server exposes **39 MCP tools**. In normal use you never call these by hand — your AI assistant picks them from your plain-language request. This reference is for understanding what's available and for power users scripting against the MCP directly.
+The server exposes **40 MCP tools**. In normal use you never call these by hand — your AI assistant picks them from your plain-language request. This reference is for understanding what's available and for power users scripting against the MCP directly.
 
 > Each tool's exact input schema is advertised over MCP (your client can list it). Signatures below show the arguments you'll actually reach for; optional/advanced parameters are summarized in prose.
 
@@ -19,6 +19,7 @@ This is the modern flow: start → poll → zip. It never times out and survives
 | `librecrawl_audit_force_advance` | `(session_id)` | Force the crawl past a stuck phase (e.g. finalize the current pages when discovery stalls). |
 | `librecrawl_audit_artifacts` | `(session_id)` | List the artifact files produced, without downloading the zip. |
 | `librecrawl_master_audit_status` | `(session_id)` | Aggregate score, coverage, manual review, tasks, provider evidence, snapshot, and artifact completeness. |
+| `librecrawl_snapshot_export` | `(session_id, max_bytes=50000000)` | Export the registered portable snapshot as bounded base64 with SHA-256 integrity metadata. |
 | `librecrawl_snapshot_diff` | `(session_id_before, session_id_after, max_changes=500)` | Compare two registered portable snapshots and return bounded structured changes. |
 | `librecrawl_audit_pdf` | `(report_path, base_url="")` | Render a saved Markdown audit report as a branded PDF (WeasyPrint). |
 | `librecrawl_report_content` | `(session_id)` | Return the Markdown report body for a finished audit. |

@@ -10,7 +10,7 @@
 
 Run a complete on-site SEO audit on any website — straight from Claude, Cursor, Codex, or any Model Context Protocol (MCP) client. **Unlimited pages · 50+ checks · PDF + CSVs · MIT-licensed · self-hosted · ephemeral by design.**
 
-Built on the open-source [**LibreCrawl**](https://github.com/PhialsBasement/LibreCrawl) engine, exposed through 39 MCP tools your AI assistant calls directly.
+Built on the open-source [**LibreCrawl**](https://github.com/PhialsBasement/LibreCrawl) engine, exposed through 40 MCP tools your AI assistant calls directly.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-orange?style=for-the-badge&logo=anthropic)](https://modelcontextprotocol.io)
@@ -45,7 +45,7 @@ Built on the open-source [**LibreCrawl**](https://github.com/PhialsBasement/Libr
 - [Your first audit](#-your-first-audit)
 - [How it works](#-how-it-works) · [Architecture](#-architecture)
 - [Configuration](#-configuration)
-- [39 MCP tools](#-39-mcp-tools)
+- [40 MCP tools](#-40-mcp-tools)
 - [Documentation](#-documentation)
 - [Roadmap](#-roadmap)
 - [License & credits](#-license--trademarks)
@@ -105,7 +105,7 @@ There are great desktop SEO crawlers (you know the ones). There are great cloud 
 
 ### ⚡ It runs **inside your AI assistant**
 
-39 MCP tools your agent calls directly. No GUI app to babysit, no SaaS dashboard to log into, no CSV exports to upload to ChatGPT. **You just ask.**
+40 MCP tools your agent calls directly. No GUI app to babysit, no SaaS dashboard to log into, no CSV exports to upload to ChatGPT. **You just ask.**
 
 ### 🚀 Chunked-progressive crawler that **never times out**
 
@@ -451,7 +451,7 @@ All environment variables are optional — the defaults just work. Set them via 
 
 ---
 
-## 🛠️ 39 MCP tools
+## 🛠️ 40 MCP tools
 
 <details>
 <summary><strong>Expand the full tool reference</strong></summary>
@@ -460,7 +460,7 @@ All environment variables are optional — the defaults just work. Set them via 
 - `librecrawl_start_chunked_audit` · `librecrawl_audit_status` · `librecrawl_audit_zip`
 - `librecrawl_audit_pause` · `librecrawl_audit_resume` · `librecrawl_audit_cancel` · `librecrawl_audit_force_advance`
 - `librecrawl_audit_artifacts` · `librecrawl_audit_pdf` · `librecrawl_report_content`
-- `librecrawl_master_audit_status` · `librecrawl_snapshot_diff`
+- `librecrawl_master_audit_status` · `librecrawl_snapshot_export` · `librecrawl_snapshot_diff`
 
 **Specialist:**
 - `librecrawl_external_links_audit` — re-run external-link validation on a specific crawl
@@ -489,8 +489,12 @@ Deeper guides live in [`docs/`](docs/):
 |---|---|
 | **[Getting Started](docs/GETTING-STARTED.md)** | Install every way (one-liner · Docker · manual), per-client config for Claude Code/Desktop, Cursor, Windsurf, Codex, Continue.dev, and your first audit end-to-end |
 | **[Configuration](docs/CONFIGURATION.md)** | Every environment variable, HTTP vs stdio transport, ports, reports directory, PageSpeed key |
-| **[Tools Reference](docs/TOOLS.md)** | All 39 MCP tools — signatures, arguments, when to use each |
+| **[Tools Reference](docs/TOOLS.md)** | All 40 MCP tools — signatures, arguments, when to use each |
 | **[Architecture](docs/ARCHITECTURE.md)** | How the wrapper, background worker, AIMD controller, and LibreCrawl backend fit together |
+| **[Upgrade to V3](docs/UPGRADE-v2-to-v3.md)** | Additive rollout, compatibility, rollback, and provider migration |
+| **[Deployment](docs/DEPLOYMENT.md)** | Docker volumes, snapshot persistence, permissions, Windows/Linux differences, and retention |
+| **[Security Policy](docs/SECURITY_PROBE_POLICY.md)** | Allowed passive checks and prohibited aggressive/destructive probes |
+| **[Production Validation](docs/PRODUCTION_VALIDATION.md)** | Offline release gate and bounded credential-specific live smoke checks |
 | **[Troubleshooting](docs/TROUBLESHOOTING.md)** | Common errors and fixes — backend unreachable, empty audits, PDF/WeasyPrint, Docker health, big-site tuning |
 | **[Snapshot Diff](docs/audit/SNAPSHOT_DIFF.md)** | Portable crawl snapshots, Rule 74 baseline workflow, schema, and failure semantics |
 

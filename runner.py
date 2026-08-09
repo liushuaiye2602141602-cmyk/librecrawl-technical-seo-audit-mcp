@@ -413,7 +413,11 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
 
     sess = state.get_session(sid)
     url = sess["url"]
-    settings = sess.get("settings", {}) or {}
+    from audit_rules.configuration import load_operational_settings
+    operational_defaults, configuration_errors = load_operational_settings()
+    settings = {**operational_defaults, **(sess.get("settings", {}) or {})}
+    for error in configuration_errors:
+        state.log_event(sid, "configuration_warning", error)
     try:
         pages, links = libreclient.export_pages(upstream_crawl_id)
     except Exception as e:
@@ -634,6 +638,8 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
     # PDF report (v1.5) — Aditya-branded WeasyPrint render of the MD report.
     # Last so it includes all the analysis above.
     try:
+        if not settings.get("report_pdf_enabled", True):
+            raise RuntimeError("PDF report disabled by AUDIT_REPORT_PDF_ENABLED")
         import pdf_report
         pdf_path = REPORTS_DIR / f"{domain}-{timestamp}.pdf"
         pdf_meta = pdf_report.render_pdf(report_md, pdf_path, base_url=url)
@@ -645,7 +651,11 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
     except Exception as e:
         # PDF failure must NOT kill finalize — the MD + CSVs are the primary
         # artifacts.
-        state.log_event(sid, "pdf_generation_failed", str(e))
+        if (isinstance(e, RuntimeError)
+                and str(e).startswith("PDF report disabled")):
+            state.log_event(sid, "pdf_generation_skipped", str(e))
+        else:
+            state.log_event(sid, "pdf_generation_failed", str(e))
 
     # ── v3.0 Phase 1: Master Audit V3 shadow pipeline ──────────────────────────
     # Runs the unified 80-rule registry in parallel with existing audit code.
@@ -718,6 +728,9 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
                     _record_v3_artifact_failure(sid, "external_artifacts", exc)
 
                 try:
+                    if not settings.get("master_report_enabled", True):
+                        raise RuntimeError(
+                            "Master report disabled by AUDIT_MASTER_REPORT_ENABLED")
                     report_paths = _write_master_report_artifacts(
                         sid, url, v3_findings, coverage_rows, domain, timestamp,
                         REPORTS_DIR)
@@ -725,7 +738,11 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
                         "artifacts": sorted(report_paths),
                     })
                 except Exception as exc:
-                    _record_v3_artifact_failure(sid, "master_report", exc)
+                    if (isinstance(exc, RuntimeError)
+                            and str(exc).startswith("Master report disabled")):
+                        state.log_event(sid, "v3_master_report_skipped", str(exc))
+                    else:
+                        _record_v3_artifact_failure(sid, "master_report", exc)
 
                 # Generate master-audit-tasks.csv from all findings (Rule 40)
                 try:

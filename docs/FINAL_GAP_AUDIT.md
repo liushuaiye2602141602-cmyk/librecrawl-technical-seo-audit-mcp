@@ -25,7 +25,7 @@ There are **no remaining in-scope P0, P1, or P2 `NEEDS_IMPLEMENTATION` gaps**.
 - Added explainable scoring contributions, exclusions, not-checked rules, and confidence label.
 - Added safe task aggregation with affected URL counts/samples.
 - Wired enhanced Markdown/PDF reports and normalized external-provider artifacts.
-- Added aggregate audit-status and portable snapshot-diff MCP tools.
+- Added aggregate audit-status, bounded portable snapshot export, and snapshot-diff MCP tools.
 
 ## Intentional findings
 

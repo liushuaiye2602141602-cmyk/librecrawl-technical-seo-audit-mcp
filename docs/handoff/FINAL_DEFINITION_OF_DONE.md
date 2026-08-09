@@ -34,7 +34,7 @@ The older draft of this document incorrectly required 80 automatic adapters and 
 | 23 | Legacy and V3 artifact pipelines are both wired | production/compatibility tests | PASS |
 | 24 | Required V3 artifact failures are explicitly partial | artifact failure event test | PASS |
 | 25 | Enhanced Markdown and PDF reports are generated | reporting tests | PASS |
-| 26 | Aggregate audit and snapshot-diff MCP tools are additive and bounded | MCP status tests and server compile | PASS |
+| 26 | Aggregate audit, snapshot export, and snapshot-diff MCP tools are additive and bounded | MCP/status/export tests and server compile | PASS |
 | 27 | Feature flag OFF preserves legacy behavior | backward-compatibility tests | PASS |
 | 28 | Checks perform no direct network I/O | repository scan; providers own I/O | PASS |
 | 29 | Active probes are bounded/read-only; destructive security actions absent | security tests and code inspection | PASS |

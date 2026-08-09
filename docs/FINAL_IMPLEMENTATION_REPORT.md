@@ -52,7 +52,7 @@ Portable snapshots are versioned, compressed, validated, independent of ephemera
 
 ## MCP tools and backward compatibility
 
-All legacy MCP signatures remain available. The server exposes 39 tools, including new additive `librecrawl_master_audit_status` and `librecrawl_snapshot_diff`. The first aggregates score, coverage, manual/task/provider/snapshot/artifact status; the second compares two registered portable snapshots with a bounded response.
+All legacy MCP signatures remain available. The server exposes 40 tools, including additive `librecrawl_master_audit_status`, `librecrawl_snapshot_export`, and `librecrawl_snapshot_diff`. They aggregate audit state, export portable snapshots with bounded base64/SHA-256 transport, and compare two registered snapshots with a bounded response.
 
 Feature flag OFF preserves legacy behavior and schemas. Feature flag ON adds V3 artifacts without removing legacy fields or outputs.
 

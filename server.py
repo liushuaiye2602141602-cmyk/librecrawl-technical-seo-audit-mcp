@@ -3282,6 +3282,28 @@ def librecrawl_snapshot_diff(session_id_before: str, session_id_after: str,
 
 
 @mcp.tool()
+def librecrawl_snapshot_export(session_id: str,
+                               max_bytes: int = 50_000_000) -> dict:
+    """Export a session's registered portable snapshot as bounded base64 + SHA-256."""
+    from audit_rules.snapshot_export import SnapshotExportError, export_snapshot_file
+
+    snapshot_path = None
+    for artifact in _state.list_artifacts(session_id):
+        if artifact["kind"] == "audit_snapshot":
+            snapshot_path = artifact["path"]
+            break
+    if snapshot_path is None:
+        return {"success": False,
+                "error": "Session has no registered audit_snapshot artifact"}
+    try:
+        result = export_snapshot_file(snapshot_path, max_bytes=max_bytes)
+    except (SnapshotExportError, OSError, ValueError) as exc:
+        return {"success": False,
+                "error": f"Snapshot export failed: {type(exc).__name__}"}
+    return {"success": True, "session_id": session_id, **result}
+
+
+@mcp.tool()
 def librecrawl_audit_pause(session_id: str) -> dict:
     """Pause a crawling session. Resume with librecrawl_audit_resume()."""
     return _runner.pause_session(session_id)

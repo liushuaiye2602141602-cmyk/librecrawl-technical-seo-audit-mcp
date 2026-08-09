@@ -14,6 +14,15 @@ Everything is configured through environment variables. All are optional — the
 | `REPORTS_DIR` | `~/librecrawl-reports` | Directory where audit zips are written. Docker mounts this to `./reports`. |
 | `LIBRECRAWL_UPSTREAM_DB` | `~/.librecrawl/upstream/users.db` | Path to LibreCrawl's SQLite file, used for orphan-page and cleanup checks. If the file isn't reachable, those specific checks skip gracefully — the core audit is unaffected. |
 | `PAGESPEED_API_KEY` | unset | Google PageSpeed Insights API key. Enables the `librecrawl_pagespeed*` tools and raises PSI rate limits (25k/day). |
+| `AUDIT_FETCH_TIMEOUT_SECONDS` | `20` | Shared bounded fetch timeout, validated from 1–120 seconds. |
+| `AUDIT_FETCH_WORKERS` | `4` | Same-origin sitemap-fill concurrency, validated from 1–32. |
+| `AUDIT_EXTERNAL_FETCH_WORKERS` | `8` | Cross-origin external-link concurrency, validated from 1–32. |
+| `AUDIT_FETCH_DELAY_MS` | `500` | Politeness delay for sitemap-fill requests, validated from 0–10,000 ms. |
+| `AUDIT_CONTENT_SAMPLE_LIMIT` | `500` | Deep content-analysis cap; core crawl-derived rules still cover all pages. |
+| `AUDIT_EXTENDED_SAMPLE_LIMIT` | `500` | Refetch-based extended-check cap; coverage reports the distinction. |
+| `AUDIT_FILL_SITEMAP_ORPHANS` | `true` | Enables bounded sitemap-orphan completion. |
+| `AUDIT_REPORT_PDF_ENABLED` | `true` | Generate the legacy branded PDF; disabled output is logged as skipped. |
+| `AUDIT_MASTER_REPORT_ENABLED` | `true` | Generate enhanced V3 Markdown/PDF; disabling it intentionally leaves that artifact set incomplete. |
 | `MASTER_AUDIT_V3_ENABLED` | `false` | Master gate for the 80-rule V3 pipeline. |
 | `MASTER_AUDIT_GSC_ENABLED` | `true` | Enables the GSC provider when V3 is enabled and credentials are present. |
 | `GSC_ACCESS_TOKEN` | unset | Short-lived OAuth 2.0 bearer token with Search Console read-only access. Never use the PageSpeed API key here. |
