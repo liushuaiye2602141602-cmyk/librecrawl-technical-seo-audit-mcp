@@ -115,6 +115,16 @@ def _configure_styles(doc: Document) -> None:
     normal.font.size = Pt(10)
 
 
+def _heading(doc: Document, text: str, level: int = 1):
+    """Add a real Heading with page-break-before so sections start on a new
+    page WITHOUT ever producing a header/footer-only blank page."""
+    heading = doc.add_heading(text, level=level)
+    p_pr = heading._p.get_or_add_pPr()
+    page_break = OxmlElement("w:pageBreakBefore")
+    p_pr.append(page_break)
+    return heading
+
+
 def _new_landscape_section(doc: Document):
     section = doc.add_section(WD_SECTION.NEW_PAGE)
     section.orientation = WD_ORIENT.LANDSCAPE
@@ -216,8 +226,23 @@ def _add_evidence_items(doc, evidence_text: str) -> None:
             p2.style = doc.styles["List Bullet 2"]
 
 
+def _client_evidence_70(doc, item: dict) -> None:
+    """Client-facing evidence for Audit #70: never dump raw likely_form_urls.
+    Shows a readable summary and at most 5 URLs; full evidence stays in the
+    Detailed Findings CSV / Technical Appendix."""
+    urls = item.get("representative") or []
+    p = doc.add_paragraph(style="List Bullet")
+    p.add_run(f"{max(len(urls), 1)} likely form/contact pages identified.")
+    for url in urls[:5]:
+        up = doc.add_paragraph(style="List Bullet 2")
+        _add_url_text(up, url)
+    if len(urls) > 5:
+        note = doc.add_paragraph(style="List Bullet")
+        note.add_run("完整 URL 清单见 Detailed URL Findings CSV / Manual Review worksheet。")
+
+
 def _summary_table(doc, rows: list[list[str]]) -> None:
-    headers = ["ID", "Category", "Check", "Exec.", "Result", "Pri.",
+    headers = ["ID", "Category", "Check", "Exec.", "Result", "Rule Pri.",
                "Confidence", "Affected", "Action"]
     table = doc.add_table(rows=1, cols=len(headers))
     table.style = "Table Grid"
@@ -258,7 +283,7 @@ def _summary_table(doc, rows: list[list[str]]) -> None:
 
 
 def _static_toc(doc, entries: list[tuple[str, str]]) -> None:
-    doc.add_heading("Table of Contents", level=1)
+    _heading(doc, "Table of Contents", level=1)
     for label, bookmark in entries:
         p = doc.add_paragraph()
         p.style = doc.styles["Normal"]
@@ -324,14 +349,13 @@ def build_docx(
         r = mp.add_run(f"{label}: {value}")
         r.font.size = Pt(11)
         r.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
-    doc.add_page_break()
+    # Management Summary starts a new page via pageBreakBefore (no blank page).
 
     # ---------- Header / footer (applies to all sections) ----------
     _header_footer(doc.sections[0], "Baolai Packaging")
 
     # ---------- Management Summary ----------
-    doc.add_heading("Management Summary", level=1)
-    _add_bookmark(doc.paragraphs[-1], "ManagementSummary")
+    _add_bookmark(_heading(doc, "Management Summary", level=1), "ManagementSummary")
     doc.add_paragraph(
         f"本次对 {domain} 执行 80 项技术 SEO 诊断（315 页真实爬取）。"
         "状态分布如下（Result 与 Execution 分开统计，合计均为 80）。")
@@ -387,8 +411,6 @@ def build_docx(
         "#70 表单可访问性部分人工验证）。")
     doc.add_paragraph(
         "基础健康层：robots、状态码、canonical、重定向、sitemap、死链、Schema、安全头均 PASS。")
-    doc.add_page_break()
-
     # ---------- Static TOC ----------
     _static_toc(doc, [
         ("Management Summary", "ManagementSummary"),
@@ -400,11 +422,8 @@ def build_docx(
         ("Acceptance & Recheck", "Acceptance"),
         ("Technical Appendix", "TechnicalAppendix"),
     ])
-    doc.add_page_break()
-
     # ---------- Executive Summary ----------
-    doc.add_heading("Executive Summary", level=1)
-    _add_bookmark(doc.paragraphs[-1], "ExecutiveSummary")
+    _add_bookmark(_heading(doc, "Executive Summary", level=1), "ExecutiveSummary")
     summary = doc.add_table(rows=1, cols=2)
     summary.style = "Table Grid"
     for index, header in enumerate(("指标", "数值")):
@@ -436,13 +455,10 @@ def build_docx(
     doc.add_paragraph(
         "健康领域：robots、状态码、canonical、重定向、sitemap、内部死链、"
         "Schema（Organization/BreadcrumbList 等真实分布）、安全头均 PASS。")
-    doc.add_page_break()
-
     # ---------- Summary table (landscape) ----------
     landscape = _new_landscape_section(doc)
     _header_footer(landscape, "Baolai Packaging")
-    doc.add_heading("80-Item Diagnostic Summary", level=1)
-    _add_bookmark(doc.paragraphs[-1], "SummaryTable")
+    _add_bookmark(_heading(doc, "80-Item Diagnostic Summary", level=1), "SummaryTable")
     rows = []
     for item in items:
         rows.append([
@@ -461,8 +477,7 @@ def build_docx(
     # ---------- Full 80-Item Diagnosis (portrait) ----------
     portrait = _new_portrait_section(doc)
     _header_footer(portrait, "Baolai Packaging")
-    doc.add_heading("Full 80-Item Diagnosis", level=1)
-    _add_bookmark(doc.paragraphs[-1], "FullDiagnosis")
+    _add_bookmark(_heading(doc, "Full 80-Item Diagnosis", level=1), "FullDiagnosis")
     for item in items:
         heading = doc.add_heading(f"AUDIT #{item['audit_id']:02d}", level=2)
         _add_bookmark(heading, f"Audit{item['audit_id']:02d}")
@@ -477,7 +492,10 @@ def build_docx(
         _label(doc, "Actual Website State:", item["actual_state"])
         _label(doc, "Diagnosis:", item["diagnosis"])
         _label(doc, "Evidence:", "")
-        _add_evidence_items(doc, item["evidence"])
+        if item["audit_id"] == 70:
+            _client_evidence_70(doc, item)
+        else:
+            _add_evidence_items(doc, item["evidence"])
         if item["audit_id"] == 27 and schema_distribution:
             _label(doc, "Schema Type Distribution:", "")
             for schema_type, count in schema_distribution.items():
@@ -521,9 +539,7 @@ def build_docx(
             _label(doc, "Limitations:", item["limitations"])
 
     # ---------- Roadmap ----------
-    doc.add_page_break()
-    doc.add_heading("30-Day Remediation Roadmap", level=1)
-    _add_bookmark(doc.paragraphs[-1], "Roadmap")
+    _add_bookmark(_heading(doc, "30-Day Remediation Roadmap", level=1), "Roadmap")
     for section_title, lines in [
         ("Confirmed Remediation（0–14 天）", [
             "#11/#45（合并）：为 15 个零内链产品页补充 HTML 内链。",
@@ -549,9 +565,7 @@ def build_docx(
             doc.add_paragraph(line, style="List Bullet")
 
     # ---------- Responsibility Matrix ----------
-    doc.add_page_break()
-    doc.add_heading("Responsibility Matrix", level=1)
-    _add_bookmark(doc.paragraphs[-1], "Responsibility")
+    _add_bookmark(_heading(doc, "Responsibility Matrix", level=1), "Responsibility")
     resp = doc.add_table(rows=1, cols=3)
     resp.style = "Table Grid"
     for index, header in enumerate(("角色", "主要职责", "对应 Audit")):
@@ -576,9 +590,7 @@ def build_docx(
         cells[2].text = audits
 
     # ---------- Acceptance & Recheck ----------
-    doc.add_page_break()
-    doc.add_heading("Acceptance & Recheck", level=1)
-    _add_bookmark(doc.paragraphs[-1], "Acceptance")
+    _add_bookmark(_heading(doc, "Acceptance & Recheck", level=1), "Acceptance")
     acc = doc.add_table(rows=1, cols=3)
     acc.style = "Table Grid"
     for index, header in enumerate(("阶段", "动作", "时机")):
@@ -599,9 +611,7 @@ def build_docx(
         cells[2].text = timing
 
     # ---------- Technical Appendix ----------
-    doc.add_page_break()
-    doc.add_heading("Technical Appendix", level=1)
-    _add_bookmark(doc.paragraphs[-1], "TechnicalAppendix")
+    _add_bookmark(_heading(doc, "Technical Appendix", level=1), "TechnicalAppendix")
     doc.add_paragraph(
         "数据来源：2026-08-09 受控生产爬取（315 页，全部 HTTP 200）+ 离线 replay 重建（当前规则引擎）。")
     doc.add_paragraph(

@@ -173,3 +173,23 @@ def test_docx_final_metrics_consistent(tmp_path):
     assert "90.35" in text
     assert "64.29%" in text
     assert "87.32%" in text
+
+
+def test_docx_roadmap_no_redundant_blank_break(tmp_path):
+    """Section headings use page-break-before instead of a blank break
+    paragraph, so LibreOffice/Word never render a header/footer-only page."""
+    from docx import Document
+    from docx.oxml.ns import qn
+    doc = Document(str(_build(tmp_path)))
+    paragraphs = doc.paragraphs
+    roadmap = next(
+        p for p in paragraphs
+        if p.style.name == "Heading 1"
+        and p.text == "30-Day Remediation Roadmap"
+    )
+    p_pr = roadmap._p.get_or_add_pPr()
+    assert p_pr.find(qn("w:pageBreakBefore")) is not None
+    # No empty paragraph immediately before the roadmap heading.
+    index = paragraphs.index(roadmap)
+    previous = paragraphs[index - 1]
+    assert previous.text.strip() != ""
