@@ -320,19 +320,9 @@ def render_pdf(markdown_text: str, output_path: Path, base_url: str) -> dict:
     # WeasyPrint takes a string url-or-content; we use string_io via from_string.
     # base_url passed to HTML lets relative resources resolve (we don't need it,
     # but pass it anyway to avoid warnings).
-    HTML(string=full_html, base_url=str(output_path.parent)).write_pdf(
-        target=str(output_path)
-    )
-
-    # Page count - use pypdf to inspect the result. Failures fall back to 0.
-    pages = 0
-    try:
-        from pypdf import PdfReader  # type: ignore
-        with open(output_path, "rb") as f:
-            reader = PdfReader(f)
-            pages = len(reader.pages)
-    except Exception:
-        pages = 0
+    document = HTML(string=full_html, base_url=str(output_path.parent)).render()
+    pages = len(document.pages)
+    document.write_pdf(target=str(output_path))
 
     size_bytes = output_path.stat().st_size
 
