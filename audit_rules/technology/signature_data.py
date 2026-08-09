@@ -171,7 +171,7 @@ SIGNATURES = {
              "strength": "strong"},
             {"type": "response_header", "pattern": r"^cf-cache-status$",
              "strength": "strong"},
-            {"type": "response_header", "pattern": r"^server$.*cloudflare",
+            {"type": "response_header", "pattern": r"^server[:=].*cloudflare",
              "strength": "medium"},
         ],
     },
@@ -179,9 +179,9 @@ SIGNATURES = {
         "category": "Web Server",
         "technology_type": "Web Server",
         "signals": [
-            {"type": "response_header", "pattern": r"^server$.*nginx",
+            {"type": "response_header", "pattern": r"^server[:=].*nginx",
              "strength": "strong"},
-            {"type": "response_header", "pattern": r"^server$.*openresty",
+            {"type": "response_header", "pattern": r"^server[:=].*openresty",
              "strength": "medium"},
         ],
     },
@@ -189,7 +189,7 @@ SIGNATURES = {
         "category": "Web Server",
         "technology_type": "Web Server",
         "signals": [
-            {"type": "response_header", "pattern": r"^server$.*apache",
+            {"type": "response_header", "pattern": r"^server[:=].*apache",
              "strength": "strong"},
         ],
     },
@@ -197,7 +197,7 @@ SIGNATURES = {
         "category": "Web Server",
         "technology_type": "Web Server",
         "signals": [
-            {"type": "response_header", "pattern": r"^server$.*litespeed",
+            {"type": "response_header", "pattern": r"^server[:=].*litespeed",
              "strength": "strong"},
             {"type": "response_header", "pattern": r"^x-litespeed-cache$",
              "strength": "strong"},
