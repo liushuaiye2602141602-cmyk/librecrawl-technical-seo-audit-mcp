@@ -83,7 +83,8 @@ services:
       - AUDIT_SNAPSHOT_OUTPUT_DIR=${AUDIT_SNAPSHOT_OUTPUT_DIR:-/snapshots}
     volumes:
       - ./reports:/reports
-      - librecrawl-data:/librecrawl-data:ro
+      # Write access is required for per-session auto_cleanup of upstream rows.
+      - librecrawl-data:/librecrawl-data
       # Portable snapshots survive container recreation independently of
       # ephemeral audit sessions. Export/download remains available via MCP.
       - audit-snapshots:/snapshots

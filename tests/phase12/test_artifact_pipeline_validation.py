@@ -1,5 +1,7 @@
 """Production-like offline validation of the complete applicable V3 bundle."""
 
+from pathlib import Path
+
 
 def test_validation_script_builds_real_applicable_artifacts_and_zip(tmp_path):
     from scripts.validate_v3_artifacts import run_validation
@@ -20,3 +22,13 @@ def test_validation_script_builds_real_applicable_artifacts_and_zip(tmp_path):
         "task_csv",
     }
     assert result["provider_artifacts"] == []
+
+
+def test_compose_allows_mcp_to_cleanup_the_shared_upstream_database():
+    """auto_cleanup requires write access to the shared LibreCrawl database."""
+    compose = (Path(__file__).resolve().parents[2] / "docker-compose.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "librecrawl-data:/librecrawl-data:ro" not in compose
+    assert "librecrawl-data:/librecrawl-data" in compose

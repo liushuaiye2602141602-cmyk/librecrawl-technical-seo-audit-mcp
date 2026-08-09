@@ -246,6 +246,36 @@ class TestAdapterRobotsTxt:
         assert len(findings) >= 1
         assert "disallow" in findings[0].finding_detail.lower()
 
+    def test_bot_specific_disallows_do_not_fail_when_important_paths_are_clear(
+        self, har_rule, sample_site_ctx, sample_pages
+    ):
+        """A large raw count is not evidence of over-blocking search crawlers."""
+        from audit_rules.adapters import _adapter_robots_txt
+
+        sample_site_ctx.robots_txt_disallow_count = 29
+        sample_site_ctx._site_data = {
+            "robots_txt": {
+                "important_blocked": [],
+                "disallow_rules": ["/"] * 29,
+            }
+        }
+
+        findings = _adapter_robots_txt(har_rule(1), sample_site_ctx, sample_pages, {})
+
+        assert findings == []
+
+    def test_production_path_evidence_still_flags_important_block(self, har_rule, sample_site_ctx, sample_pages):
+        from audit_rules.adapters import _adapter_robots_txt
+
+        sample_site_ctx._site_data = {
+            "robots_txt": {"important_blocked": ["/"], "disallow_rules": ["/"]}
+        }
+
+        findings = _adapter_robots_txt(har_rule(1), sample_site_ctx, sample_pages, {})
+
+        assert len(findings) == 1
+        assert "important_blocked" in findings[0].evidence
+
 
 class TestAdapterNoindex:
     """Rule 3: noindex/nofollow check."""
@@ -337,6 +367,20 @@ class TestAdapterInternalLinks:
         )]
         findings = _adapter_internal_links(har_rule(11), sample_site_ctx, pages, {})
         assert len(findings) == 0
+
+    def test_unknown_export_link_data_is_not_reported_as_zero(self, har_rule, sample_site_ctx):
+        """Sitemap-filled pages without link data must not become false positives."""
+        from audit_rules.adapters import _adapter_internal_links
+        from audit_rules.context import PageContext
+
+        page = PageContext.from_export({
+            "url": "https://example.com/sitemap-only",
+            "status_code": 200,
+        })
+
+        findings = _adapter_internal_links(har_rule(11), sample_site_ctx, [page], {})
+
+        assert findings == []
 
 
 class TestAdapterMetaDescription:

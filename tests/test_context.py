@@ -183,6 +183,22 @@ class TestPageContextLightweight:
         assert ctx.external_links_count == 1
         assert ctx.linked_from_count == 2  # linked_from list
 
+    def test_from_export_uses_numeric_link_counts_when_details_are_unavailable(self):
+        """Production LibreCrawl exports counts without links_detailed."""
+        from audit_rules.context import PageContext
+
+        ctx = PageContext.from_export({
+            "url": "https://example.com/",
+            "status_code": 200,
+            "internal_links": 104,
+            "external_links": 8,
+            "linked_from": ["https://example.com/about"],
+        })
+
+        assert ctx.internal_links_count == 104
+        assert ctx.external_links_count == 8
+        assert ctx.linked_from_count == 1
+
     def test_from_export_defaults_missing_fields(self):
         from audit_rules.context import PageContext
         page = {"url": "https://example.com/minimal"}
@@ -391,6 +407,18 @@ class TestSiteContext:
         ctx = SiteContext.from_site_check(sample_site_data)
         assert ctx.https_redirects is True
         assert ctx.www_redirects is False
+
+    def test_from_site_check_accepts_production_redirect_keys(self):
+        """The live site checker uses explicit production field names."""
+        from audit_rules.context import SiteContext
+
+        ctx = SiteContext.from_site_check({
+            "https_redirect": {"http_redirects_to_https": True},
+            "www_redirect": {"alt_redirects_properly": True},
+        })
+
+        assert ctx.https_redirects is True
+        assert ctx.www_redirects is True
 
     def test_from_site_check_defaults_for_empty_data(self):
         from audit_rules.context import SiteContext

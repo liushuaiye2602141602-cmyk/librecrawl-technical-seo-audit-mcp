@@ -159,8 +159,14 @@ class PageContext:
             json_ld_types = []
 
         links = page_dict.get("links_detailed") or []
-        internal_count = sum(1 for l in links if l.get("is_internal", True))
-        external_count = len(links) - internal_count
+        if links:
+            internal_count = sum(1 for l in links if l.get("is_internal", True))
+            external_count = len(links) - internal_count
+        else:
+            # Current LibreCrawl production exports expose aggregate integer
+            # counts even when the optional detailed link rows are unavailable.
+            internal_count = int(page_dict.get("internal_links", 0) or 0)
+            external_count = int(page_dict.get("external_links", 0) or 0)
 
         ctx = cls(
             url=page_dict.get("url", ""),
@@ -243,7 +249,11 @@ class SiteContext:
             sitemap_found=sitemap.get("found", False),
             sitemap_url=sitemap.get("url"),
             sitemap_url_count=sitemap.get("url_count", 0),
-            https_redirects=https.get("redirects", False),
-            www_redirects=www.get("redirects", False),
+            https_redirects=https.get(
+                "redirects", https.get("http_redirects_to_https", False)
+            ),
+            www_redirects=www.get(
+                "redirects", www.get("alt_redirects_properly", False)
+            ),
             _site_data=site_data,
         )

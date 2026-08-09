@@ -518,14 +518,37 @@ def _adapter_robots_txt(
             evidence="robots_txt_found=False",
             detail="/robots.txt not found or inaccessible",
         ))
-    elif site_ctx.robots_txt_disallow_count > 5:
-        findings.append(_mk_finding(
-            rule, url=site_ctx.base_url,
-            detected=f"Disallow count: {site_ctx.robots_txt_disallow_count}",
-            expected="Disallow rules ≤5 unless justified",
-            evidence=f"robots_txt_disallow_count={site_ctx.robots_txt_disallow_count}",
-            detail=f"High disallow count ({site_ctx.robots_txt_disallow_count}) — review for over-blocking",
-        ))
+    else:
+        robots_data = (site_ctx._site_data or {}).get("robots_txt")
+        important_blocked = (
+            robots_data.get("important_blocked", [])
+            if isinstance(robots_data, dict) else []
+        )
+        # Prefer path-level production evidence. A high raw count can consist
+        # entirely of bot-specific directives and is not SEO over-blocking.
+        over_blocked = bool(important_blocked) if robots_data is not None else (
+            site_ctx.robots_txt_disallow_count > 5
+        )
+        if over_blocked:
+            findings.append(_mk_finding(
+                rule, url=site_ctx.base_url,
+                detected=(
+                    f"Important paths blocked: {', '.join(important_blocked)}"
+                    if important_blocked else
+                    f"Disallow count: {site_ctx.robots_txt_disallow_count}"
+                ),
+                expected="Important crawlable paths are not blocked",
+                evidence=(
+                    f"important_blocked={important_blocked}"
+                    if important_blocked else
+                    f"robots_txt_disallow_count={site_ctx.robots_txt_disallow_count}"
+                ),
+                detail=(
+                    f"Important paths are blocked by robots.txt: {', '.join(important_blocked)}"
+                    if important_blocked else
+                    f"High disallow count ({site_ctx.robots_txt_disallow_count}) — review for over-blocking"
+                ),
+            ))
 
     return findings
 
@@ -671,7 +694,12 @@ def _adapter_internal_links(
     for ctx in page_contexts:
         if ctx.status_code != 200:
             continue
-        if ctx.internal_links_count == 0:
+        raw = ctx._raw_export
+        outbound_known = raw is None or any(
+            key in raw for key in ("links_detailed", "internal_links")
+        )
+        inbound_known = raw is None or "linked_from" in raw
+        if outbound_known and ctx.internal_links_count == 0:
             findings.append(_mk_finding(
                 rule, url=ctx.url,
                 detected="0 internal links",
@@ -679,7 +707,7 @@ def _adapter_internal_links(
                 evidence="internal_links_count=0",
                 detail=f"Orphan page: {ctx.url} has zero internal links pointing out",
             ))
-        if ctx.linked_from_count == 0:
+        if inbound_known and ctx.linked_from_count == 0:
             findings.append(_mk_finding(
                 rule, url=ctx.url,
                 detected="0 inbound links",
