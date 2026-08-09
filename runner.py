@@ -119,6 +119,30 @@ def _write_v3_summary_artifacts(
     return output
 
 
+def _write_master_report_artifacts(
+    sid: str,
+    base_url: str,
+    findings: list,
+    coverage_rows: list,
+    domain: str,
+    timestamp: str,
+    reports_dir: Path,
+) -> dict[str, Path]:
+    """Write and register the decision-oriented V3 Markdown and PDF report."""
+    import pdf_report
+    from audit_rules.reporting import build_master_report
+
+    markdown = build_master_report(base_url, findings, coverage_rows)
+    md_path = Path(reports_dir) / f"{domain}-{timestamp}.master-audit.md"
+    md_path.write_text(markdown, encoding="utf-8")
+    state.add_artifact(sid, "master_report_md", md_path)
+
+    pdf_path = Path(reports_dir) / f"{domain}-{timestamp}.master-audit.pdf"
+    pdf_report.render_pdf(markdown, pdf_path, base_url=base_url)
+    state.add_artifact(sid, "master_report_pdf", pdf_path)
+    return {"master_report_md": md_path, "master_report_pdf": pdf_path}
+
+
 def _prepare_snapshot_artifacts(
     sid: str,
     export_data: dict,
@@ -653,6 +677,16 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
                     })
                 except Exception as exc:
                     _record_v3_artifact_failure(sid, "summary_artifacts", exc)
+
+                try:
+                    report_paths = _write_master_report_artifacts(
+                        sid, url, v3_findings, coverage_rows, domain, timestamp,
+                        REPORTS_DIR)
+                    state.log_event(sid, "v3_master_report_generated", {
+                        "artifacts": sorted(report_paths),
+                    })
+                except Exception as exc:
+                    _record_v3_artifact_failure(sid, "master_report", exc)
 
                 # Generate master-audit-tasks.csv from all findings (Rule 40)
                 try:
