@@ -14,7 +14,7 @@ def test_master_report_contains_decision_sections_and_truthful_statuses():
     )
 
     for heading in (
-        "Executive Summary", "Priority Plan (P0 / P1 / P2 / P3)",
+        "Executive Summary", "Status Legend", "Priority Plan (P0 / P1 / P2 / P3)",
         "80 Rule Coverage", "Top Business Risks", "Technical SEO",
         "Indexing / Crawling", "Architecture / Internal Links",
         "Content / Metadata", "International SEO", "Structured Data",
@@ -26,6 +26,9 @@ def test_master_report_contains_decision_sections_and_truthful_statuses():
         assert f"## {heading}" in report
     assert "NOT_CHECKED" in report
     assert "FAIL" in report
+    for status in ("Error", "Warning", "Opportunity", "Intentional", "Manual",
+                   "NOT_CHECKED", "NOT_APPLICABLE"):
+        assert status in report
 
 
 def test_runner_writes_and_registers_enhanced_markdown_and_pdf(tmp_path, monkeypatch):

@@ -59,6 +59,25 @@ def test_lost_links_marks_result_truncated():
     assert _client(handler).lost_backlinks("example.com", limit=500)["truncated"] is True
 
 
+def test_referring_domains_use_v4_and_are_bounded():
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={
+            "meta": {"success": True, "total": 700},
+            "data": [{"domain": "ref.example", "domain_score": 60,
+                      "backlinks_count": 5}],
+        })
+
+    result = _client(handler).referring_domains("example.com", limit=900)
+
+    assert requests[0].url.path == "/apis/v4/backlinks/v1/ref-domains"
+    assert requests[0].url.params["limit"] == "500"
+    assert result["domains"][0]["domain"] == "ref.example"
+    assert result["truncated"] is True
+
+
 def test_identical_requests_are_cached():
     calls = 0
 
@@ -71,6 +90,45 @@ def test_identical_requests_are_cached():
     client.backlinks_overview("example.com")
     client.backlinks_overview("example.com")
     assert calls == 1
+
+
+def test_domain_keywords_are_bounded_and_normalized_from_analytics_csv():
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, text=(
+            "Keyword;Position;Previous Position;Position Difference;Search Volume;Url;Traffic\n"
+            "seo audit;4;7;3;1900;https://example.com/a;12.5\n"))
+
+    rows = _client(handler).domain_keywords("example.com", database="us", limit=9999)
+
+    request = requests[0]
+    assert request.url.path == "/"
+    assert request.url.params["type"] == "domain_organic"
+    assert request.url.params["key"] == "secret-key"
+    assert request.url.params["display_limit"] == "500"
+    assert rows == [{
+        "keyword": "seo audit", "position": 4, "previous_position": 7,
+        "position_change": 3, "search_volume": 1900,
+        "url": "https://example.com/a", "traffic_pct": 12.5,
+    }]
+
+
+def test_organic_competitors_are_bounded_and_normalized():
+    def handler(request):
+        return httpx.Response(200, text=(
+            "Domain;Competition Level;Common Keywords;Organic Keywords;Organic Traffic\n"
+            "competitor.example;0.42;25;800;1200\n"))
+
+    rows = _client(handler).organic_competitors(
+        "example.com", database="uk", limit=10)
+
+    assert rows == [{
+        "domain": "competitor.example", "competition_level": 0.42,
+        "common_keywords": 25, "organic_keywords": 800,
+        "organic_traffic": 1200,
+    }]
 
 
 @pytest.mark.parametrize(

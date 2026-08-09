@@ -29,10 +29,14 @@ Everything is configured through environment variables. All are optional — the
 | `GSC_SITE_URL` | unset | Exact Search Console property: a URL-prefix property including its trailing slash, or `sc-domain:example.com`. |
 | `GSC_INSPECTION_LIMIT` | `20` | Deterministic per-audit URL Inspection sample; bounded to 100. |
 | `GSC_ANALYTICS_MAX_ROWS` | `50000` | Maximum Search Analytics rows per 28-day window; each API page is bounded to 25,000. |
-| `MASTER_AUDIT_SEMRUSH_ENABLED` | `true` | Enables the Semrush provider when V3 and a v4 key are present. |
-| `SEMRUSH_API_KEY` | unset | Semrush API v4 key used only in the `Authorization` header. |
+| `MASTER_AUDIT_SEMRUSH_ENABLED` | `true` | Enables the optional Semrush provider when V3 and a paid key are present. |
+| `SEMRUSH_API_KEY` | unset | Semrush key. V4 calls use the authorization header; Standard Analytics uses Semrush's required TLS query parameter. Errors and cache keys never contain the key. |
 | `SEMRUSH_TARGET` | audit hostname | Optional explicit root-domain target. |
 | `SEMRUSH_LOST_LINK_LIMIT` | `100` | Lost-link result limit, bounded to 500 to control paid API units. |
+| `SEMRUSH_REFERRING_DOMAIN_LIMIT` | `100` | Referring-domain row limit, bounded to 500. |
+| `SEMRUSH_DATABASE` | `us` | Semrush regional database for domain keyword and organic competitor evidence. |
+| `SEMRUSH_KEYWORD_LIMIT` | `100` | Domain keyword/position row limit, bounded to 500. |
+| `SEMRUSH_COMPETITOR_LIMIT` | `25` | Organic competitor row limit, bounded to 500. |
 | `MASTER_AUDIT_GA4_ENABLED` | `true` | Enables the GA4 provider when V3 and OAuth configuration are present. |
 | `GA4_ACCESS_TOKEN` | unset | Short-lived OAuth bearer token with `analytics.readonly` access. |
 | `GA4_PROPERTY_ID` | unset | Numeric GA4 property ID or `properties/{id}` resource name. |

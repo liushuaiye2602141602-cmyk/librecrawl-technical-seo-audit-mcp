@@ -28,6 +28,11 @@ class SemrushDataProvider(DataProvider):
         self._lost_link_limit = _limit(
             lost_link_limit if lost_link_limit is not None
             else os.getenv("SEMRUSH_LOST_LINK_LIMIT", "100"))
+        self._referring_domain_limit = _limit(
+            os.getenv("SEMRUSH_REFERRING_DOMAIN_LIMIT", "100"))
+        self._database = os.getenv("SEMRUSH_DATABASE", "us").strip().lower() or "us"
+        self._keyword_limit = _limit(os.getenv("SEMRUSH_KEYWORD_LIMIT", "100"))
+        self._competitor_limit = _limit(os.getenv("SEMRUSH_COMPETITOR_LIMIT", "25"))
         self.runtime_available = False
 
     @property
@@ -67,8 +72,12 @@ class SemrushDataProvider(DataProvider):
     def collect(self, site_ctx: SiteContext, page_contexts: list[PageContext],
                 shared_data: dict) -> bool:
         target = self._resolve_target(site_ctx)
-        payload = {"target": target, "overview": None, "lost_links": [],
-                   "lost_total": 0, "lost_truncated": False, "errors": []}
+        payload = {"target": target, "database": self._database,
+                   "overview": None, "lost_links": [], "lost_total": 0,
+                   "lost_truncated": False, "referring_domains": [],
+                   "referring_domains_total": 0,
+                   "referring_domains_truncated": False, "domain_keywords": [],
+                   "organic_competitors": [], "errors": []}
         shared_data["semrush"] = payload
         if not target:
             payload["errors"].append("target:ValueError")
@@ -98,5 +107,27 @@ class SemrushDataProvider(DataProvider):
             successes += 1
         except Exception as exc:
             payload["errors"].append(f"lost_links:{type(exc).__name__}")
+        try:
+            domains = client.referring_domains(
+                target, limit=self._referring_domain_limit)
+            payload["referring_domains"] = domains.get("domains") or []
+            payload["referring_domains_total"] = int(domains.get("total", 0) or 0)
+            payload["referring_domains_truncated"] = bool(
+                domains.get("truncated", False))
+            successes += 1
+        except Exception as exc:
+            payload["errors"].append(f"referring_domains:{type(exc).__name__}")
+        try:
+            payload["domain_keywords"] = client.domain_keywords(
+                target, database=self._database, limit=self._keyword_limit)
+            successes += 1
+        except Exception as exc:
+            payload["errors"].append(f"domain_keywords:{type(exc).__name__}")
+        try:
+            payload["organic_competitors"] = client.organic_competitors(
+                target, database=self._database, limit=self._competitor_limit)
+            successes += 1
+        except Exception as exc:
+            payload["errors"].append(f"organic_competitors:{type(exc).__name__}")
         self.runtime_available = successes > 0
         return self.runtime_available

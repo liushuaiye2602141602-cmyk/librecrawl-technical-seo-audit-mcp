@@ -16,7 +16,14 @@ def test_external_artifacts_are_emitted_only_for_collected_provider_data():
                 "previous_rows": [], "errors": []},
         "semrush": {"target": "example.com", "lost_links": [{
             "source_url": "https://ref.example/", "target_url": "https://example.com/",
-            "domain_score": 50, "is_lost": True}], "errors": []},
+            "domain_score": 50, "is_lost": True}],
+            "domain_keywords": [{"keyword": "seo audit", "position": 4,
+                                  "previous_position": 7, "position_change": 3,
+                                  "url": "https://example.com/a"}],
+            "referring_domains": [{"domain": "ref.example", "domain_score": 60,
+                                    "backlinks_count": 5}],
+            "organic_competitors": [{"domain": "competitor.example",
+                                      "common_keywords": 25}], "errors": []},
         "server_logs": {"processed_lines": 10, "status_counts": {"200": 8},
                         "bot_counts": {"Googlebot": 3}, "waste_bot_counts": {},
                         "errors": []},
@@ -29,6 +36,9 @@ def test_external_artifacts_are_emitted_only_for_collected_provider_data():
         "wordpress_audit_json"}
     assert next(csv.DictReader(io.StringIO(
         artifacts["search_performance_csv"]))) ["period"] == "current"
+    semrush_rows = list(csv.DictReader(io.StringIO(artifacts["backlinks_csv"])))
+    assert {row["record_type"] for row in semrush_rows} == {
+        "lost_backlink", "referring_domain", "domain_keyword", "organic_competitor"}
     assert json.loads(artifacts["wordpress_audit_json"])["site_host"] == "example.com"
 
 

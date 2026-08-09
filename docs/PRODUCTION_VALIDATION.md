@@ -9,6 +9,7 @@ Use this checklist after installation or credential rotation. Start with a contr
 3. Run `docker compose config -q` and build the image.
 4. Run the benchmark and compare with `docs/audit/PERFORMANCE_BENCHMARK.md`.
 5. Scan tracked files for secrets and confirm check modules contain no direct HTTP clients.
+6. Run `python scripts/validate_v3_artifacts.py` in the production image. Confirm 80 coverage rows, `pdf_valid: true`, `zip_valid: true`, and no provider artifacts when provider inputs are disabled.
 
 ## Safe live smoke
 
@@ -22,7 +23,7 @@ Use this checklist after installation or credential rotation. Start with a contr
 ## Credential-specific validation
 
 - GSC: use read-only OAuth and a property matching the audited host; test one analytics window and one URL Inspection sample.
-- Semrush: use a v4 paid key and a root-domain target that contains the audited host.
+- Semrush: use a paid key entitled for Backlinks v4 and Standard Analytics, a root-domain target that contains the audited host, and a deliberately small keyword/competitor/referring-domain limit for the first smoke.
 - GA4: use `analytics.readonly` for the intended property.
 - Server Logs: provide an exact `SERVER_LOG_SITE_HOST` manifest and a small copied log fixture first.
 - WordPress/render/availability: generate privacy-safe, host-bound read-only snapshots and validate them before production use.

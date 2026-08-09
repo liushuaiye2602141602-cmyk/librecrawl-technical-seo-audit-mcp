@@ -26,6 +26,27 @@ class StubClient:
                             "domain_score": 60, "is_lost": True}],
                 "total": 1, "limit": limit, "truncated": False}
 
+    def referring_domains(self, target, *, limit):
+        self.calls.append(("referring_domains", target, limit))
+        if "referring_domains" in self.fail:
+            raise RuntimeError("unavailable")
+        return {"domains": [{"domain": "ref.example", "domain_score": 60}],
+                "total": 1, "limit": limit, "truncated": False}
+
+    def domain_keywords(self, target, *, database, limit):
+        self.calls.append(("keywords", target, database, limit))
+        if "keywords" in self.fail:
+            raise RuntimeError("unavailable")
+        return [{"keyword": "seo audit", "position": 4,
+                 "previous_position": 7, "position_change": 3,
+                 "url": "https://example.com/a"}]
+
+    def organic_competitors(self, target, *, database, limit):
+        self.calls.append(("competitors", target, database, limit))
+        if "competitors" in self.fail:
+            raise RuntimeError("unavailable")
+        return [{"domain": "competitor.example", "common_keywords": 25}]
+
 
 def test_configuration_gate(monkeypatch):
     from audit_rules.providers.semrush_provider import SemrushDataProvider
@@ -47,9 +68,15 @@ def test_collect_uses_configured_target_and_preserves_payload():
 
     assert provider.collect(SiteContext(base_url="https://shop.example.com"), [], shared)
     assert client.calls == [
-        ("overview", "example.com"), ("lost", "example.com", 25)]
+        ("overview", "example.com"), ("lost", "example.com", 25),
+        ("referring_domains", "example.com", 100),
+        ("keywords", "example.com", "us", 100),
+        ("competitors", "example.com", "us", 25)]
     assert shared["semrush"]["overview"]["domains_count"] == 20
     assert shared["semrush"]["lost_links"][0]["domain_score"] == 60
+    assert shared["semrush"]["referring_domains"][0]["domain"] == "ref.example"
+    assert shared["semrush"]["domain_keywords"][0]["position_change"] == 3
+    assert shared["semrush"]["organic_competitors"][0]["common_keywords"] == 25
 
 
 def test_rejects_cross_site_configured_target_before_calling_semrush():
@@ -80,7 +107,8 @@ def test_all_failures_make_runtime_source_unavailable():
     from audit_rules.providers.semrush_provider import SemrushDataProvider
 
     provider = SemrushDataProvider(
-        api_key="key", client=StubClient(fail={"overview", "lost"}))
+        api_key="key", client=StubClient(
+            fail={"overview", "lost", "referring_domains", "keywords", "competitors"}))
     shared = {}
     assert provider.collect(SiteContext(base_url="https://example.com"), [], shared) is False
     assert provider.runtime_available is False
