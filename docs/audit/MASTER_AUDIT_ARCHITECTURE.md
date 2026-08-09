@@ -1,5 +1,7 @@
 # Master Audit Architecture — 80-Item Enterprise SEO Audit Standard
 
+> **Historical design baseline.** Implementation is complete; current architecture and certification are recorded in [`../FINAL_IMPLEMENTATION_REPORT.md`](../FINAL_IMPLEMENTATION_REPORT.md), [`../FINAL_GAP_AUDIT.md`](../FINAL_GAP_AUDIT.md), and [`../handoff/CURRENT_SYSTEM_STATE.json`](../handoff/CURRENT_SYSTEM_STATE.json). Phase targets and deferred items below describe the pre-implementation plan and are not current status.
+
 > **Status**: Phase 1 Analysis | **Date**: 2026-08-09  
 > **Target**: `librecrawl-technical-seo-audit-mcp` v2.2.0 → v3.0.0  
 > **Author**: System analysis — awaiting human approval before implementation

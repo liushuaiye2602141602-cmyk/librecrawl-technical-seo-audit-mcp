@@ -1,10 +1,10 @@
 # Codex Handoff — Master SEO Audit System
 
 **Handoff Date:** 2026-08-09
-**Git Commit:** `012f995` — `feat: evaluate remaining external evidence rules`
+**Certified Implementation Commit:** `7d37d45` — aggregate MCP audit/snapshot status
 **Branch:** `feat/master-audit-completion`
-**Tests:** 655 passed, 0 failed
-**Handoff Type:** COMPLETE PROJECT HANDOFF — build the ENTIRE remaining system
+**Tests:** 677 passed, 0 failed, 0 skipped at certification checkpoint
+**Handoff Type:** FINAL IMPLEMENTATION CERTIFICATION
 
 ---
 
@@ -25,8 +25,8 @@ A **Master Technical SEO Audit System** that evaluates 80 SEO rules against craw
 | Total rules | 80 (IDs 1..80) |
 | Rules with working adapters | 72 |
 | EXISTING_PARTIAL rules without adapters | 0 |
-| Tests | 655 passing |
-| Providers implemented | LibreCrawl, PageSpeed (live), GSC/Semrush/GA4 (offline), Server Logs, WordPress Privileged, Rendered DOM and Availability snapshots (formats/contracts validated) |
+| Tests | 677 passing at certification checkpoint |
+| Providers implemented | LibreCrawl, PageSpeed (live), GSC/Semrush/GA4 (offline), Server Logs, WordPress Privileged, Rendered DOM, Availability, Manual Review |
 | Providers NOT started | None in the planned provider workstreams |
 
 ### Classification Breakdown
@@ -54,8 +54,9 @@ A **Master Technical SEO Audit System** that evaluates 80 SEO rules against craw
 | Phase 7 | 34,35 | 2 | GA4 Admin/Data API rules |
 | Phase 8 | 33 (+ Rule 5 enrichment) | 1 | Streaming server access-log analysis |
 | Phase 9 | 36,64,65,68,69 | 5 | Read-only WordPress administrator snapshot rules |
-| Phase 10 | Current 8 `NEW_MANUAL` rules | 8 | Registry-driven Markdown review artifact and fail-closed parser |
+| Phase 10 | Current 8 `NEW_MANUAL` rules | 8 | Host-bound generate/validate/ingest workflow with coverage closure |
 | Phase 11 | 46,48,80 (+ PSI classification 21,24,62,63) | 7 | Portable render/availability evidence and source-truth correction |
+| Phase 12 | Cross-cutting | — | Scoring, task aggregation, enhanced reports, external artifacts, MCP status, benchmark, and final gap closure |
 
 ---
 

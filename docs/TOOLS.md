@@ -12,7 +12,7 @@ This is the modern flow: start → poll → zip. It never times out and survives
 |---|---|---|
 | `librecrawl_start_chunked_audit` | `(url, total_max_pages=10000)` | Kicks off a full background audit. Returns a `session_id` in under 2 seconds. `total_max_pages=0` means unlimited. |
 | `librecrawl_audit_status` | `(session_id)` | Poll this every ~25s. Reports `status` (queued/crawling/done), `pages_done`, `current_delay_ms`, chunk p95 latency, error rate, and `artifacts_ready`. |
-| `librecrawl_audit_zip` | `(session_id, auto_cleanup=True)` | Returns the finished audit as a base64 zip (PDF + 7 CSVs). With `auto_cleanup=True` the server then wipes the session, artifact files, and upstream crawl record. |
+| `librecrawl_audit_zip` | `(session_id, auto_cleanup=True)` | Returns the finished audit as a base64 zip (8 legacy files plus enabled V3 artifacts). With `auto_cleanup=True` the server then wipes the session, artifact files, and upstream crawl record. |
 | `librecrawl_audit_pause` | `(session_id)` | Pause an in-progress crawl. |
 | `librecrawl_audit_resume` | `(session_id)` | Resume a paused crawl. |
 | `librecrawl_audit_cancel` | `(session_id)` | Stop and discard an in-progress audit. |

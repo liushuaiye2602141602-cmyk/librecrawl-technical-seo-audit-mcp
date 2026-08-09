@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-09T05:12:54+08:00",
+  "generated_at": "2026-08-09T23:00:00+08:00",
   "git_branch": "feat/master-audit-completion",
-  "git_head": "012f995",
-  "git_commit_short": "012f995",
+  "git_head": "7d37d45",
+  "git_commit_short": "7d37d45",
   "python": "3.14.5",
   "tests": {
-    "collected": 655,
-    "passed": 655,
+    "collected": 677,
+    "passed": 677,
     "failed": 0,
     "skipped": 0
   },
@@ -94,6 +94,13 @@
       "note": "SCHEMA_PRIVACY_AND_RULE_VALIDATED; REAL_MONITORING_SUMMARY_PENDING",
       "module": "audit_rules/providers/availability_snapshot_provider.py",
       "rules": [80]
+    },
+    "manual_review": {
+      "status": "IMPLEMENTED",
+      "input_validated": true,
+      "note": "HOST_BOUND_GENERATE_VALIDATE_INGEST_COVERAGE_LOOP",
+      "module": "audit_rules/providers/manual_review_provider.py",
+      "rules": [53, 54, 55, 56, 57, 71, 72, 73]
     }
   },
   "artifacts": {
@@ -111,7 +118,10 @@
       "status": "IMPLEMENTED",
       "snapshot_file": "*.audit-snapshot-v1.json.gz",
       "diff_file": "*.crawl-diff.csv"
-    }
+    },
+    "audit_score": {"status": "IMPLEMENTED", "file": "audit-score.json"},
+    "enhanced_reports": {"status": "IMPLEMENTED", "files": ["master-audit.md", "master-audit.pdf"]},
+    "external_evidence": {"status": "IMPLEMENTED", "files": ["search-performance.csv", "backlinks.csv", "server-log-analysis.csv", "ga4-audit.json", "wordpress-audit.json", "render-audit.json", "availability-audit.json"]}
   },
   "feature_flags": {
     "MASTER_AUDIT_V3_ENABLED": {
@@ -139,7 +149,10 @@
     "GA4_PROPERTY_ID": {"default": "", "desc": "GA4 property identifier"},
     "MASTER_AUDIT_SERVER_LOGS_ENABLED": {"default": "true", "desc": "Enable local access-log provider"},
     "SERVER_LOG_PATH": {"default": "", "desc": "Explicit read-only access-log file"},
+    "SERVER_LOG_SITE_HOST": {"default": "", "desc": "Required exact audited hostname manifest"},
     "SERVER_LOG_MAX_LINES": {"default": "1000000", "desc": "Streaming line cap"},
+    "MASTER_AUDIT_MANUAL_REVIEW_ENABLED": {"default": "true", "desc": "Enable completed manual review ingestion"},
+    "MANUAL_REVIEW_INPUT_PATH": {"default": "", "desc": "Read-only completed host-bound manual review Markdown"},
     "MASTER_AUDIT_WORDPRESS_ENABLED": {"default": "false", "desc": "Enable local WordPress snapshot provider"},
     "WP_AUDIT_EXPORT_PATH": {"default": "", "desc": "Read-only wordpress-audit-v1 JSON path"},
     "WP_AUDIT_MAX_AGE_HOURS": {"default": "168", "desc": "Maximum accepted snapshot age"},
