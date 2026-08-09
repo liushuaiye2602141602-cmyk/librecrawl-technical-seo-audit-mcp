@@ -12,6 +12,10 @@ from audit_rules.models import CoverageRow, Finding
 _PRIORITY = {"Critical": 4.0, "High": 3.0, "Medium": 2.0, "Low": 1.0}
 _SEVERITY = {"Error": 1.0, "Warning": 0.55, "Opportunity": 0.25, "Info": 0.0}
 _EXECUTED = {ExecutionStatus.EXECUTED_FULL.value, ExecutionStatus.EXECUTED_PARTIAL.value}
+# Only definitive outcomes participate in the quality score. UNKNOWN rules
+# (e.g. #70 accessibility without rendered DOM) express incompleteness
+# through Coverage/Confidence instead of earning a PASS score.
+_DEFINITIVE_RESULTS = {"PASS", "FAIL", "WARNING", "OPPORTUNITY"}
 
 
 @dataclass(frozen=True)
@@ -81,6 +85,10 @@ def compute_audit_score(findings: list[Finding],
     eligible = [row for row in coverage_rows
                 if _value(row.execution_status) != ExecutionStatus.NOT_APPLICABLE.value]
     executed = [row for row in eligible if _value(row.execution_status) in _EXECUTED]
+    quality_rows = [
+        row for row in executed
+        if _value(row.result_status) in _DEFINITIVE_RESULTS
+    ]
     coverage_pct = round(100.0 * len(executed) / len(eligible), 2) if eligible else 0.0
 
     penalties: dict[int, float] = {}
@@ -94,9 +102,9 @@ def compute_audit_score(findings: list[Finding],
         confidence_total += confidence * priority
         confidence_weight += priority
 
-    categories = sorted({row.category for row in executed})
+    categories = sorted({row.category for row in quality_rows})
     category_scores = {
-        category: _quality([row for row in executed if row.category == category], penalties)
+        category: _quality([row for row in quality_rows if row.category == category], penalties)
         for category in categories
     }
     finding_confidence = (
@@ -104,7 +112,7 @@ def compute_audit_score(findings: list[Finding],
         if confidence_weight else None
     )
     contributions = []
-    for row in sorted(executed, key=lambda item: item.audit_id):
+    for row in sorted(quality_rows, key=lambda item: item.audit_id):
         weight = _PRIORITY.get(_value(row.priority), 1.0)
         penalty = min(weight, penalties.get(row.audit_id, 0.0))
         contributions.append({
@@ -114,7 +122,7 @@ def compute_audit_score(findings: list[Finding],
             "rule_score": round(100.0 * (1.0 - penalty / weight), 2),
         })
     return AuditScore(
-        overall_score=_quality(executed, penalties),
+        overall_score=_quality(quality_rows, penalties),
         coverage_pct=coverage_pct,
         finding_confidence_pct=finding_confidence,
         executed_rules=len(executed), eligible_rules=len(eligible),

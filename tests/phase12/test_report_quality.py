@@ -17,12 +17,13 @@ def _rule(audit_id: int):
 
 
 def _page(url="https://example.com/", status=200, title="Unique title",
-          word_count=500, json_ld=None, robots=""):
+          word_count=500, json_ld=None, robots="", images=None):
     from audit_rules.context import PageContext
     return PageContext(
         url=url, status_code=status, title=title, word_count=word_count,
         robots=robots, json_ld_types=json_ld or [],
-        _raw_export={"links_detailed": [], "linked_from": []},
+        _raw_export={"links_detailed": [], "linked_from": [],
+                     "images": images or []},
     )
 
 
@@ -218,3 +219,49 @@ def test_artifact_metrics_consistency():
     )
     assert metrics["audit_rows"] == metrics["matrix_rows"] == 80
     assert metrics["finding_rows"] == metrics["task_rows"]
+
+
+def test_unknown_rule_does_not_get_full_score():
+    from audit_rules.coverage import CoverageManager
+    from audit_rules.scoring import compute_audit_score
+    from audit_rules.context import PageContext
+    from audit_rules.models import Finding
+
+    pages = [PageContext(url="https://example.com/", status_code=200)]
+    rows = CoverageManager(_registry()).compute(
+        _site(), pages, [],
+        providers_available={"LibreCrawl"},
+        executed_rule_ids={40},
+        evaluated_overrides={40: 1},
+    )
+    # Simulate #70 PARTIAL/UNKNOWN (form accessibility) with Info findings.
+    info = Finding(
+        audit_id=70, rule_id="form_link_accessibility", url="SITE",
+        category="用户体验 / Accessibility", priority="Medium",
+        severity="Info", finding_type="Info", scope="SITE",
+        detected_value="LIMITED", evidence="no body HTML",
+        confidence=0.5,
+    )
+    rows70 = CoverageManager(_registry()).compute(
+        _site(), pages, [info],
+        providers_available={"LibreCrawl"},
+        executed_rule_ids={40, 70},
+    )
+    score = compute_audit_score([info], rows70)
+    contribution_70 = [
+        c for c in score.rule_contributions if c["audit_id"] == 70
+    ]
+    assert contribution_70 == []
+    assert rows70[69].execution_status.value == "EXECUTED_PARTIAL"
+    assert rows70[69].result_status.value == "UNKNOWN"
+
+
+def test_alt_short_length_heuristic_is_optimization():
+    from audit_rules.checks.media import check_image_alt_quality
+    page = _page("https://example.com/", images=[
+        {"src": "https://example.com/x.jpg", "alt": "ab"},
+    ])
+    findings = check_image_alt_quality(_rule(79), _site(), [page], {})
+    short = [f for f in findings if "too short" in (f.detected_value or "")]
+    assert short
+    assert str(short[0].severity) == "Opportunity"

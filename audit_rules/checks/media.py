@@ -328,8 +328,12 @@ def check_image_alt_quality(
         for issue in per_page_issues:
             issue_type = issue["issue_type"]
 
-            if issue_type in ("alt_too_short", "alt_meaningless_code", "alt_is_filename",
-                              "linked_image_empty_alt"):
+            if issue_type == "alt_too_short":
+                # Pure length threshold is a heuristic candidate, not a
+                # confirmed defect; generic/code/file-name alts stay WARNING.
+                severity = Severity.OPPORTUNITY
+            elif issue_type in ("alt_meaningless_code", "alt_is_filename",
+                                "linked_image_empty_alt"):
                 severity = Severity.WARNING
             elif issue_type == "alt_repeated_across_images":
                 severity = Severity.OPPORTUNITY

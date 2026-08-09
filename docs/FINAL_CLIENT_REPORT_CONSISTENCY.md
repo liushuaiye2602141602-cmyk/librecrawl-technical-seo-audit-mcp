@@ -10,31 +10,36 @@
 | Coverage rows | 80 | PASS |
 | Detailed finding rows | 909 | PASS |
 | Task rows | 905 | PASS |
-| Manual rows | 8 | PASS |
+| Manual rows | 9 | PASS |
 | Performance rows | 5 | PASS |
-| Confirmed remediation | 367 | PASS |
-| Optimization | 414 | PASS |
+| Confirmed remediation | 321 | PASS |
+| Optimization | 460 | PASS |
 | Data-required | 17 | PASS |
-| Manual-review actions | 8 | PASS |
-| P0/P1/P2/P3 confirmed remediation | 0/2/365/0 | PASS |
-| Score | 90.51 | PASS |
+| Manual-review actions | 9 | PASS |
+| P0/P1/P2/P3 confirmed remediation | 0/2/319/0 | PASS |
+| Score | 90.35 | PASS |
 | Coverage | 64.29% | PASS |
 | Confidence | High (87.32%) | PASS |
-| PDF pages | 78 | PASS |
+| PDF pages | 72 | PASS |
 
 ## Artifact hashes
 
-- `01_80_Item_Master_SEO_Diagnostic_Report.html`: `97c8b7bf7a4d454324dd7719e0804091c36b18692d5b920a79c15a05e9fda0f2`
-- `01_80_Item_Master_SEO_Diagnostic_Report.pdf`: `e2b80f451070445af72a8ff2020cc13ea2e5b4a7c2ab63b76c20bf48961183b3`
-- `02_80_Item_Master_SEO_Diagnostic_Report.md`: `8a536dbde8b39f5a897c59dd845ce07f291bbdca20b61491d88f62d2ec73e775`
-- `03_80_Item_Diagnostic_Matrix.csv`: `b008dd4d13fbd9a6d32d7a5841c111d66170f3d794d0c9010581c78009b4289e`
-- `04_Detailed_URL_Findings.csv`: `fa436b4c17ccead283fa2257267a650aeb2a106b786b06705f97c3963f907a8f`
-- `05_Remediation_Tasks.csv`: `6620328ea52dfb3036ca9773fb78eb78e030755af2f377aae8c70a3099fda5ad`
-- `06_Manual_Review.csv`: `4ce4655f11ff094e4ee9b2361bd0daf409703a787d19033cf55e8260fbb1b989`
+- `01_80_Item_Master_SEO_Diagnostic_Report.html`: `71b92059fe46804171841b5feaeb47e2e81f10b01baa202ed20fcf275ad8f580`
+- `01_80_Item_Master_SEO_Diagnostic_Report.pdf`: `a3e1da961a02154568bdd58feaa55d0213bbf0ee78784a8a6d2102fc6a53b78c`
+- `02_80_Item_Master_SEO_Diagnostic_Report.md`: `2a3513ede20fbc2b50b920a33e1b6f173d887e8fac0cca93aa0972aed46dc7bb`
+- `03_80_Item_Diagnostic_Matrix.csv`: `21fb604c2453f79a6e0359d54b472c88651461e9d4246c9ab52eef99400033a3`
+- `04_Detailed_URL_Findings.csv`: `f4da632c4310d2b065224a4474fba19f5705c80613ac5027d1e20dc2d4eb5da4`
+- `05_Remediation_Tasks.csv`: `accf853a1957cc99510dcf77d18529bb146ac2b7ad1b916cfad1c2de751e88ad`
+- `06_Manual_Review.csv`: `462b837022f57b7378d934c80a4c3f061470fe020363477fb74d31d2bfa616c4`
 - `07_Performance_Data.csv`: `acaaaf266a6cf1ed34cf24da6c4630126d1bf1a964c25658e65b258335702e26`
-- `08_Audit_Score.json`: `f06723bd034c75c4a3a6835a1ab32bb714942803dc1061fe499db0a1836d1bec`
-- `09_80_Rule_Coverage.csv`: `41fb5025687df04e413825d19c5ad2f1564723c9cff73f1fd4ee18b4dc924c87`
-- `80_Item_Diagnostic_Data.xlsx`: `867f8e4b83f6d58d77f77ec214ad2e89503bf330ba32c7c7ecd3c2a242e5cd38`
-- `metrics.json`: `d0c935e4516f73e838cfb91008860b1064df579dd8ba52c7afc7e36e797cf5b1`
+- `08_Audit_Score.json`: `6b25648b85e6c8fa9ffe1aaa26a95d26bc0fc679f3a9298e16254b0d05228e73`
+- `09_80_Rule_Coverage.csv`: `4cfa995439a7cd81e5736e9d58a8940e2eaedfbe80c161b541fa22735d6e940d`
+- `80_Item_Diagnostic_Data.xlsx`: `5613452f7438e4bf3203b4aaba03188d26fa0b3c03213be98bb49e263e4e891a`
+- `metrics.json`: `c51247da5f30d618b33dc2f1abc14ee3357097cc41a6b7389768fc4e022689ba`
+- `README.txt`: `5c8e3587d6a26a1b8b9c3eeb28b95b34a2991361eb0ea82777fa10a02accd1a7`
+- `Technical_Appendix\01_audit-replay-v1.json.gz`: `f38e2a45047107d80b644014770123a9855eb5a45762ae044d80e085ae39424f`
+- `Technical_Appendix\02_audit-snapshot-v1.json.gz`: `746d0290bfad8d41eb097854e88d6351432de904917171f25078990cdab0e03a`
+- `Technical_Appendix\03_artifact-manifest.json`: `50c6d32d6de57995422f998d98c4e1a2812038e973526e3e6bd41f16e896cc85`
+- `Technical_Appendix\04_INTERNAL_VALIDATION.md`: `2623ee44b5a72b88c6756fdda720cef578bc3cf1904df697750403c4a6451cf5`
 
 All checks PASS — PDF/MD/CSV/XLSX/ZIP report the same post-correction run.
