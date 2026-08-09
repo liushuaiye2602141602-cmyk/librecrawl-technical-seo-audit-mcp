@@ -319,7 +319,8 @@ class CoverageManager:
 
         # WordPress-specific rules on generic sites
         wp_rules = {36, 37, 38, 39, 64, 65, 66, 67, 68, 69}
-        if rule.audit_id in wp_rules and site_ctx.site_profile != "wordpress":
+        if rule.audit_id in wp_rules and site_ctx.site_profile not in (
+                "wordpress", "wordpress_remote"):
             return f"Not applicable: WordPress-specific rule, site profile is '{site_ctx.site_profile}'"
 
         # Hreflang/multilingual rules on single-language sites
