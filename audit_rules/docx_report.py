@@ -227,15 +227,28 @@ def _add_evidence_items(doc, evidence_text: str) -> None:
 
 
 def _client_evidence_70(doc, item: dict) -> None:
-    """Client-facing evidence for Audit #70: never dump raw likely_form_urls.
-    Shows a readable summary and at most 5 URLs; full evidence stays in the
-    Detailed Findings CSV / Technical Appendix."""
-    urls = item.get("representative") or []
+    """Client-facing evidence for Audit #70.
+
+    Never dumps raw likely_form_urls or the internal scope token SITE. When a
+    reliable URL list exists, show at most 5 examples; otherwise state that
+    rendered DOM was unavailable and scope the manual validation without
+    fabricating a URL count."""
+    urls = [
+        url for url in (item.get("representative") or [])
+        if str(url).startswith(("http://", "https://"))
+    ]
     p = doc.add_paragraph(style="List Bullet")
-    p.add_run(f"{max(len(urls), 1)} likely form/contact pages identified.")
-    for url in urls[:5]:
-        up = doc.add_paragraph(style="List Bullet 2")
-        _add_url_text(up, url)
+    p.add_run("Evidence: Rendered form DOM was not available.")
+    p = doc.add_paragraph(style="List Bullet")
+    p.add_run(
+        "Manual Validation Scope: Contact/form pages require rendered-DOM "
+        "and manual validation.")
+    if urls:
+        p = doc.add_paragraph(style="List Bullet")
+        p.add_run(f"Likely form/contact pages ({len(urls)} identified):")
+        for url in urls[:5]:
+            up = doc.add_paragraph(style="List Bullet 2")
+            _add_url_text(up, url)
     if len(urls) > 5:
         note = doc.add_paragraph(style="List Bullet")
         note.add_run("完整 URL 清单见 Detailed URL Findings CSV / Manual Review worksheet。")
@@ -502,9 +515,13 @@ def build_docx(
                 p = doc.add_paragraph(style="List Bullet")
                 p.add_run(f"{schema_type}: {count} 页")
         _label(doc, "Affected URLs:", str(item["affected_urls"]))
-        if item["representative"]:
+        representative_urls = [
+            url for url in (item["representative"] or [])
+            if str(url).startswith(("http://", "https://"))
+        ]
+        if representative_urls:
             _label(doc, "Representative URLs:", "")
-            for url in item["representative"]:
+            for url in representative_urls:
                 p = doc.add_paragraph(style="List Bullet")
                 _add_url_text(p, url)
         _label(doc, "Full Affected URL Reference:",
@@ -522,7 +539,22 @@ def build_docx(
         else:
             _label(doc, "Recommended Fix:", item["fix"] or "无需整改")
         _label(doc, "Owner:", item["owner"])
-        _label(doc, "Acceptance Criteria:", item["acceptance"])
+        acceptance = item["acceptance"]
+        if item["audit_id"] == 1:
+            acceptance = (
+                "/robots.txt 返回 200；重要页面未被错误 Disallow；"
+                "robots 规则与预期抓取策略一致；"
+                "如包含 Sitemap 声明，则地址有效。")
+        elif item["audit_id"] == 2:
+            acceptance = (
+                "Automated/Crawl Acceptance: 重要 Sitemap URL 为 "
+                "200 + Indexable + Canonical。\n"
+                "External Validation: GSC/Bing submission/processing status "
+                "requires external data and remains not checked。")
+        _label(doc, "Acceptance Criteria:", "")
+        for part in str(acceptance).split("\n"):
+            p = doc.add_paragraph(style="List Bullet")
+            _safe_add(p, part)
         if item.get("observed"):
             _label(doc, "Remote Observation（非问题）:", item["observed"])
         if item.get("manual"):

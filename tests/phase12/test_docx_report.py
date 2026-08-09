@@ -50,6 +50,15 @@ def _items(count: int = 80) -> list[dict]:
     items[37]["observed"] = "Observation only; this WordPress-specific rule is not applicable."
     items[69]["execution"] = "EXECUTED_PARTIAL"
     items[69]["result"] = "UNKNOWN"
+    items[69]["representative"] = ["SITE"]
+    items[69]["evidence"] = (
+        "SITE — Phase 2 form accessibility check is LIMITED — no DOM/form "
+        "HTML available in crawl export. 5 likely form page(s) identified "
+        "by URL patterns. | likely_form_urls=[...]")
+    items[0]["acceptance"] = (
+        "/robots.txt 返回 200；重要页面未被 Disallow；包含有效 Sitemap 声明。")
+    items[1]["acceptance"] = (
+        "Sitemap 中重要 URL 均为 200 + Indexable + Canonical；GSC/Bing 已成功读取。")
     return items
 
 
@@ -193,3 +202,35 @@ def test_docx_roadmap_no_redundant_blank_break(tmp_path):
     index = paragraphs.index(roadmap)
     previous = paragraphs[index - 1]
     assert previous.text.strip() != ""
+
+
+def _all_text(doc) -> str:
+    table_text = "\n".join(
+        cell.text for table in doc.tables for row in table.rows for cell in row.cells)
+    return "\n".join(p.text for p in doc.paragraphs) + "\n" + table_text
+
+
+def test_docx_audit70_no_site_placeholder(tmp_path):
+    from docx import Document
+    doc = Document(str(_build(tmp_path)))
+    text = _all_text(doc)
+    assert "\nSITE\n" not in text
+    assert "Rendered form DOM was not available." in text
+    assert "Manual Validation Scope" in text
+
+
+def test_docx_audit1_acceptance_updated(tmp_path):
+    from docx import Document
+    doc = Document(str(_build(tmp_path)))
+    text = _all_text(doc)
+    assert "如包含 Sitemap 声明，则地址有效" in text
+    assert "包含有效 Sitemap 声明" not in text
+
+
+def test_docx_audit2_partial_acceptance(tmp_path):
+    from docx import Document
+    doc = Document(str(_build(tmp_path)))
+    text = _all_text(doc)
+    assert "Automated/Crawl Acceptance" in text
+    assert "External Validation" in text
+    assert "GSC/Bing 已成功读取" not in text
