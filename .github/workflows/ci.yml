@@ -1,0 +1,84 @@
+name: Offline CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-validation:
+    name: Offline validation (Python 3.12)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      MASTER_AUDIT_V3_ENABLED: "false"
+      MASTER_AUDIT_PSI_ENABLED: "false"
+      MASTER_AUDIT_GSC_ENABLED: "false"
+      MASTER_AUDIT_SEMRUSH_ENABLED: "false"
+      MASTER_AUDIT_GA4_ENABLED: "false"
+      MASTER_AUDIT_SERVER_LOGS_ENABLED: "false"
+      MASTER_AUDIT_WORDPRESS_ENABLED: "false"
+      MASTER_AUDIT_RENDER_ENABLED: "false"
+      MASTER_AUDIT_AVAILABILITY_ENABLED: "false"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+
+      - name: Run full automated test suite
+        run: python -m pytest tests/ -q
+
+      - name: Compile Python sources
+        run: >-
+          python -m compileall -q
+          audit_rules scripts server.py runner.py pdf_report.py state.py
+
+      - name: Validate 80-rule registry integrity
+        shell: bash
+        run: |
+          python - <<'PY'
+          from collections import Counter
+          from audit_rules.registry import load_registry
+
+          rules = load_registry()
+          audit_ids = [rule.audit_id for rule in rules]
+          classifications = Counter(rule.impl_status.value for rule in rules)
+
+          assert len(rules) == 80, f"expected 80 rules, found {len(rules)}"
+          assert len(set(audit_ids)) == 80, "duplicate audit IDs detected"
+          assert sorted(audit_ids) == list(range(1, 81)), "audit IDs are not exactly 1..80"
+          assert sum(classifications.values()) == 80, "classification total is not 80"
+          print(f"rules={len(rules)} classifications={dict(sorted(classifications.items()))}")
+          PY
+
+      - name: Validate tracked JSON files
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          files = subprocess.check_output(
+              ["git", "ls-files", "*.json"], text=True
+          ).splitlines()
+          for name in files:
+              json.loads(Path(name).read_text(encoding="utf-8"))
+          print(f"validated_json={len(files)}")
+          PY
+
+      - name: Validate Docker Compose configuration
+        run: docker compose config -q
