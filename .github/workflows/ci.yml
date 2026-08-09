@@ -14,14 +14,6 @@ jobs:
     timeout-minutes: 20
     env:
       MASTER_AUDIT_V3_ENABLED: "false"
-      MASTER_AUDIT_PSI_ENABLED: "false"
-      MASTER_AUDIT_GSC_ENABLED: "false"
-      MASTER_AUDIT_SEMRUSH_ENABLED: "false"
-      MASTER_AUDIT_GA4_ENABLED: "false"
-      MASTER_AUDIT_SERVER_LOGS_ENABLED: "false"
-      MASTER_AUDIT_WORDPRESS_ENABLED: "false"
-      MASTER_AUDIT_RENDER_ENABLED: "false"
-      MASTER_AUDIT_AVAILABILITY_ENABLED: "false"
 
     steps:
       - name: Check out repository
