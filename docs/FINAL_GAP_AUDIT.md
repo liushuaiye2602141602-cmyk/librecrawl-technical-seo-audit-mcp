@@ -1,7 +1,7 @@
 # Final Repository Gap Audit
 
 **Audit date:** 2026-08-09  
-**Certified implementation code HEAD:** `7d37d45`  
+**Certified implementation code HEAD:** `4095f29`
 **Method:** repository-wide source/document scan, registry introspection, provider/adapter registration inspection, artifact wiring inspection, security/network scan, test suite, benchmark, and independent code review.
 
 ## Result
@@ -26,6 +26,8 @@ There are **no remaining in-scope P0, P1, or P2 `NEEDS_IMPLEMENTATION` gaps**.
 - Added safe task aggregation with affected URL counts/samples.
 - Wired enhanced Markdown/PDF reports and normalized external-provider artifacts.
 - Added aggregate audit-status, bounded portable snapshot export, and snapshot-diff MCP tools.
+- Restored the full optional Semrush scope: domain keywords, current/previous positions and changes, referring domains, and organic competitor context in addition to backlink/lost-link evidence.
+- Added a reusable production-like artifact validation script and verified a real PDF plus ZIP in the production image without fabricating unavailable provider artifacts.
 
 ## Intentional findings
 
@@ -39,7 +41,7 @@ There are **no remaining in-scope P0, P1, or P2 `NEEDS_IMPLEMENTATION` gaps**.
 ## External-blocked validation
 
 - GSC OAuth and verified property.
-- Semrush paid Backlinks API v4 entitlement.
+- Semrush paid Backlinks API v4 and Standard Analytics entitlement.
 - GA4 OAuth property access.
 - Real host-bound server log input.
 - Real administrator-generated WordPress snapshot.
@@ -64,7 +66,7 @@ Each subsystem is implemented, mocked, configured, documented, fail-closed, and 
 - Classifications: 18 `EXISTING_FULL`, 54 `EXISTING_PARTIAL`, 8 `NEW_MANUAL`, 0 `NEW_AUTO`, 0 `NEW_EXTERNAL_DATA`.
 - Adapters: 72 for all non-manual rules.
 - Registered audit providers: 9 plus foundational LibreCrawl.
-- Full suite at certification checkpoint: 677 passed, 0 failed, 0 skipped.
+- Full suite at certification checkpoint: 685 passed, 0 failed, 0 skipped.
 - Benchmark: 100 pages 0.083 s / 0.44 MiB; 1,000 pages 0.759 s / 3.80 MiB; 5,000 pages 3.900 s / 18.67 MiB.
 
 The final verification reruns these checks after documentation certification and records the fresh result in `docs/FINAL_IMPLEMENTATION_REPORT.md`.

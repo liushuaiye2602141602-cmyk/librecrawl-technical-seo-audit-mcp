@@ -1,9 +1,9 @@
 # Codex Handoff — Master SEO Audit System
 
 **Handoff Date:** 2026-08-09
-**Certified Implementation Commit:** `7d37d45` — aggregate MCP audit/snapshot status
+**Certified Implementation Commit:** `4095f29` — complete Semrush evidence and production-like artifact validation
 **Branch:** `feat/master-audit-completion`
-**Tests:** 677 passed, 0 failed, 0 skipped at certification checkpoint
+**Tests:** 685 passed, 0 failed, 0 skipped at certification checkpoint
 **Handoff Type:** FINAL IMPLEMENTATION CERTIFICATION
 
 ---
@@ -25,7 +25,7 @@ A **Master Technical SEO Audit System** that evaluates 80 SEO rules against craw
 | Total rules | 80 (IDs 1..80) |
 | Rules with working adapters | 72 |
 | EXISTING_PARTIAL rules without adapters | 0 |
-| Tests | 677 passing at certification checkpoint |
+| Tests | 685 passing at certification checkpoint |
 | Providers implemented | LibreCrawl, PageSpeed (live), GSC/Semrush/GA4 (offline), Server Logs, WordPress Privileged, Rendered DOM, Availability, Manual Review |
 | Providers NOT started | None in the planned provider workstreams |
 

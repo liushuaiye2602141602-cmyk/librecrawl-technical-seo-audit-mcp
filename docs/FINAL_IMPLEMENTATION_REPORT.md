@@ -4,7 +4,7 @@
 
 **MASTER SEO AUDIT SYSTEM — FULL CODE IMPLEMENTATION COMPLETE**
 
-Certified implementation code HEAD: `7d37d45` on `feat/master-audit-completion`. The final documentation/verification commit follows this code checkpoint without changing runtime behavior.
+Certified implementation code HEAD: `4095f29` on `feat/master-audit-completion`. The final documentation/verification commit follows this code checkpoint without changing runtime behavior.
 
 ## Final rule matrix
 
@@ -19,7 +19,7 @@ Certified implementation code HEAD: `7d37d45` on `feat/master-audit-completion`.
 
 LibreCrawl, PageSpeed Insights, GSC, Semrush, GA4, Server Logs, WordPress Privileged, Rendered DOM Snapshot, Availability Monitor, and Manual Review are implemented and wired. External evidence is audit-scoped and host/property-bound. Missing credentials or inputs produce `NOT_CHECKED/UNKNOWN`; provider errors do not become SEO failures.
 
-PageSpeed was live-smoke validated. GSC, Semrush, GA4, server logs, WordPress, rendered browser, and availability monitoring have complete offline contracts and remain live-validation pending for the external requirements listed below.
+PageSpeed was live-smoke validated. GSC, Semrush, GA4, server logs, WordPress, rendered browser, and availability monitoring have complete offline contracts and remain live-validation pending for the external requirements listed below. Semrush covers v4 backlink overview, lost links, referring domains, Standard Analytics domain keywords/current-previous positions, and organic competitor context with bounded paid-unit limits.
 
 ## Artifacts
 
@@ -71,7 +71,7 @@ Feature flag OFF preserves legacy behavior and schemas. Feature flag ON adds V3 
 
 ## Tests and benchmarks
 
-Certification checkpoint: 677 passed, 0 failed, 0 skipped. The final verification reruns the full suite, server compile, registry/provider/adapter integrity, security/network scans, secret scans, and benchmark after this report is committed.
+Certification checkpoint: 685 passed, 0 failed, 0 skipped. The final verification reruns the full suite, server compile, registry/provider/adapter integrity, security/network scans, secret scans, and benchmark after this report is committed.
 
 Benchmark results:
 
@@ -89,7 +89,7 @@ Benchmark results:
 ## Live validations pending / remaining external requirements
 
 - GSC: verified-property OAuth.
-- Semrush: paid Backlinks API v4 entitlement/key.
+- Semrush: paid Backlinks API v4 and Standard Analytics entitlement/key.
 - GA4: property OAuth.
 - Server Logs: real host-bound log file.
 - WordPress: real administrator-generated read-only snapshot.
