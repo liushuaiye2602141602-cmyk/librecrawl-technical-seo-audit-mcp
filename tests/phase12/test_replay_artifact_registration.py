@@ -120,6 +120,7 @@ def test_runner_marks_replay_partial_and_does_not_register_invalid_output(
     assert registered == []
     assert ("session-1", "v3_artifact_failed", {
         "artifact": "audit_replay", "error_type": "ReplayValidationError",
+        "reason": "REPLAY_ARTIFACT_INCOMPLETE",
     }) in events
     assert ("session-1", "v3_artifacts_partial", {
         "failed_artifact": "audit_replay",

@@ -97,3 +97,26 @@ def test_link_header_sanitizer_drops_wrapped_credential_url():
 
     assert "link" not in headers
     assert headers["cache-control"] == "public, max-age=60"
+
+
+def test_normal_page_copy_with_basic_information_is_not_a_credential(tmp_path):
+    """Regression fixture from the real production crawl false positive."""
+    from audit_rules.replay import build_replay_document, write_replay_artifact
+
+    document = build_replay_document(
+        source_url="https://example.com/", git_head="a" * 40,
+        generated_at="2026-08-09T07:00:00Z",
+        crawl_metadata={"crawl_parameters": {}, "truncation_status": "NOT_TRUNCATED"},
+        pages=[{
+            "url": "https://example.com/", "status_code": 200,
+            "meta_description": "Here is basic information about pouch bag manufacturing.",
+        }], links=[], site_data={}, sitemap_reconciliation={},
+        crawl_completeness={"pages_crawled": 1, "audit_complete": True},
+        provider_evidence={},
+    )
+
+    result = write_replay_artifact(
+        document, tmp_path / "basic.audit-replay-v1.json.gz",
+        expected_completed_pages=1)
+
+    assert result.valid is True

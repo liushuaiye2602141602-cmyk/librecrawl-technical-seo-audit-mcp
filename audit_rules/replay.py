@@ -76,7 +76,9 @@ _CREDENTIAL_QUERY_KEYS = frozenset({
     "awsaccesskeyid",
 })
 _TOKEN_VALUE_RE = re.compile(
-    r"(?i)(?:^|\s)(?:bearer|basic)\s+\S+|"
+    r"(?i)(?:^|\s)bearer\s+(?:eyJ[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){2}|"
+    r"[A-Za-z0-9._~+/=-]{16,})(?=\s|$)|"
+    r"(?:^|\s)basic\s+[A-Za-z0-9+/]{16,}={0,2}(?=\s|$)|"
     r"(?:^|[^A-Za-z0-9_])(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|"
     r"AIza[0-9A-Za-z_-]{20,})|"
     r"(?:^|\s)eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"

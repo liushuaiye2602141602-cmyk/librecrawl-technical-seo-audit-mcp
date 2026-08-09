@@ -53,11 +53,16 @@ _shutdown = threading.Event()
 
 def _record_v3_artifact_failure(sid: str, artifact: str,
                                 exc: Exception) -> None:
-    """Expose an additive V3 artifact failure without leaking exception text."""
-    state.log_event(sid, "v3_artifact_failed", {
+    """Expose an additive V3 artifact failure without leaking crawl data."""
+    detail = {
         "artifact": artifact,
         "error_type": type(exc).__name__,
-    })
+    }
+    if type(exc).__name__ == "ReplayValidationError":
+        # Replay validation messages are fixed contract reasons and contain no
+        # payload values or credentials.
+        detail["reason"] = str(exc).strip()[:200]
+    state.log_event(sid, "v3_artifact_failed", detail)
     state.log_event(sid, "v3_artifacts_partial", {
         "failed_artifact": artifact,
     })
