@@ -44,6 +44,7 @@ def run_validation(
     output_dir: str | Path,
     *,
     pdf_renderer: Callable[[str, Path, str], None] | None = None,
+    export_data: dict | None = None,
 ) -> dict:
     """Create real applicable artifacts, zip them, and validate key contracts."""
     import runner as production_runner
@@ -56,6 +57,7 @@ def run_validation(
     registered: dict[str, Path] = {}
     events = []
     original_add = production_runner.state.add_artifact
+    original_list = production_runner.state.list_artifacts
     original_log = production_runner.state.log_event
     original_render_pdf = pdf_report.render_pdf
     env_names = [
@@ -89,12 +91,17 @@ def run_validation(
         })
         production_runner.state.add_artifact = (
             lambda sid, kind, path: registered.__setitem__(kind, Path(path)))
+        production_runner.state.list_artifacts = lambda sid: [
+            {"kind": kind, "path": str(path)}
+            for kind, path in registered.items()
+        ]
         production_runner.state.log_event = (
             lambda sid, kind, detail=None: events.append((kind, detail)))
         integration.enable_v3()
         integration.reset_runner_cache()
 
-        export = _export()
+        export = export_data if export_data is not None else _export()
+        page_count = len(export["pages"])
         snapshot_data = production_runner._prepare_snapshot_artifacts(
             "validation", export, "https://example.com", "example.com",
             "validation", target)
@@ -109,20 +116,20 @@ def run_validation(
             pages=export["pages"], links=export["links"],
             site_data=export["site_check"],
             reconciliation={
-                "sitemap_total": 1, "crawl_total": 1,
+                "sitemap_total": page_count, "crawl_total": page_count,
                 "sitemap_only": [], "crawl_only": [],
             },
             completeness={
-                "pages_crawled": 1, "audit_complete": True,
-                "max_pages": 1, "max_pages_hit": False,
+                "pages_crawled": page_count, "audit_complete": True,
+                "max_pages": 1000, "max_pages_hit": False,
                 "incomplete_reasons": [],
             },
             session={
                 "started_at": 1, "finished_at": 2,
-                "upstream_crawl_id": 1, "total_max_pages": 1,
+                "upstream_crawl_id": 1, "total_max_pages": 1000,
                 "settings": {
-                    "chunk_target_pages": 1, "politeness": "polite",
-                    "fill_sitemap_orphans": True, "sitemap_fill_cap": 1,
+                    "chunk_target_pages": 25, "politeness": "polite",
+                    "fill_sitemap_orphans": True, "sitemap_fill_cap": 500,
                 },
             },
             fill_summary={"attempted": 0, "success_count": 0, "cap_hit": False},
@@ -150,14 +157,29 @@ def run_validation(
             generate_task_csv(findings, audit_runner.registry), encoding="utf-8")
         production_runner.state.add_artifact("validation", "task_csv", task_path)
 
+        production_runner._write_artifact_manifest(
+            "validation", "https://example.com", "example.com", "validation",
+            target, git_head="f" * 40,
+            generated_at="2026-08-09T08:00:00Z",
+        )
+
         zip_path = target / "example.com-validation.zip"
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr("SUMMARY.txt", "Offline V3 artifact validation\n")
-            for kind, path in sorted(registered.items()):
-                archive.write(path, arcname=path.name)
+        from server import _build_current_run_zip
+        bundle = _build_current_run_zip({
+            "id": "validation", "url": "https://example.com",
+            "upstream_crawl_id": 1, "pages_done": page_count,
+            "audit_complete": True,
+        }, production_runner.state.list_artifacts("validation"))
+        zip_path.write_bytes(bundle["zip_bytes"])
         with zipfile.ZipFile(zip_path) as archive:
             archive.testzip()
             zip_names = set(archive.namelist())
+
+        from audit_rules.replay import load_replay_artifact
+        replay = load_replay_artifact(registered["audit_replay"])
+        expected_names = {"SUMMARY.txt"} | {
+            path.name for path in registered.values()
+        }
 
         pdf_path = registered["master_report_pdf"]
         return {
@@ -170,9 +192,14 @@ def run_validation(
             "pdf_valid": pdf_path.read_bytes().startswith(b"%PDF"),
             "zip_path": str(zip_path),
             "events": events,
+            "replay_pages": replay["counts"]["page_count"],
+            "replay_links": replay["counts"]["link_count"],
+            "stale_artifacts": sorted(zip_names - expected_names),
+            "offline_final_bundle_status": "OFFLINE_FINAL_BUNDLE_PASS",
         }
     finally:
         production_runner.state.add_artifact = original_add
+        production_runner.state.list_artifacts = original_list
         production_runner.state.log_event = original_log
         pdf_report.render_pdf = original_render_pdf
         integration.reset_runner_cache()

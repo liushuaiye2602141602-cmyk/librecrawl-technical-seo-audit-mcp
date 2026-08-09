@@ -79,7 +79,7 @@ def test_runner_writes_validated_replay_and_registers_complete_link_graph(
         path, expected_source_url="https://example.com/",
         expected_completed_pages=2)
     assert loaded["git_head"] == "e" * 40
-    assert loaded["counts"] == {"links": 2, "pages": 2}
+    assert loaded["counts"] == {"link_count": 2, "page_count": 2}
     assert loaded["crawl_metadata"]["crawl_parameters"] == {
         "chunk_target_pages": 25,
         "fill_sitemap_orphans": True,
@@ -87,7 +87,15 @@ def test_runner_writes_validated_replay_and_registers_complete_link_graph(
         "sitemap_fill_cap": 500,
         "total_max_pages": 1000,
     }
-    assert any(kind == "v3_replay_artifact_generated" for _, kind, _ in events)
+    replay_event = next(
+        detail for _, kind, detail in events
+        if kind == "v3_replay_artifact_generated"
+    )
+    assert replay_event == {
+        "pages": 2, "links": 2,
+        "parity": "REPLAY_PARITY_PASS",
+        "sha256": replay_event["sha256"],
+    }
 
 
 def test_runner_marks_replay_partial_and_does_not_register_invalid_output(

@@ -141,7 +141,7 @@ def test_validator_rejects_fields_outside_replay_allowlists(collection, extra):
             "target_url": "https://example.com/b",
             **extra,
         }]
-        document["counts"]["links"] = 1
+        document["counts"]["link_count"] = 1
     else:
         document[collection][0].update(extra)
 
@@ -189,7 +189,7 @@ def test_link_dedupe_merges_optional_internal_classification():
         crawl_completeness=source["crawl_completeness"], provider_evidence={},
     )
 
-    assert document["counts"]["links"] == 1
+    assert document["counts"]["link_count"] == 1
     assert document["links"][0]["is_internal"] is True
     document = build_replay_document(
         source_url=source["source_url"], git_head=source["git_head"],
@@ -203,7 +203,7 @@ def test_link_dedupe_merges_optional_internal_classification():
         crawl_completeness=source["crawl_completeness"], provider_evidence={},
     )
 
-    assert document["counts"]["links"] == 1
+    assert document["counts"]["link_count"] == 1
     assert document["links"] == [{
         "source_url": "https://example.com/a",
         "target_url": "https://example.com/b",

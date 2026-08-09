@@ -148,6 +148,13 @@ class ReplayValidationResult:
     link_count: int
 
 
+@dataclass(frozen=True)
+class ReplayParityResult:
+    status: str
+    page_count: int
+    link_count: int
+
+
 def _json_safe_header_value(value: Any) -> str | list[str]:
     if isinstance(value, (list, tuple)):
         return [str(item) for item in value]
@@ -420,7 +427,10 @@ def build_replay_document(
         "source_url": source_url,
         "git_head": git_head,
         "crawl_metadata": _sanitize_json(crawl_metadata),
-        "counts": {"pages": len(page_records), "links": len(link_records)},
+        "counts": {
+            "page_count": len(page_records),
+            "link_count": len(link_records),
+        },
         "pages": page_records,
         "links": link_records,
         "site_data": _sanitize_json(site_data),
@@ -671,6 +681,38 @@ def _contains_credentials(value: Any) -> bool:
     return False
 
 
+def assert_replay_parity(source: dict, replayed: dict) -> ReplayParityResult:
+    """Prove semantic parity for every normalized crawl-layer input."""
+    validate_replay_document(source)
+    validate_replay_document(replayed)
+    fields = (
+        "url", "status_code", "canonical_url", "robots", "title",
+        "meta_description", "h1", "hreflang", "json_ld", "depth",
+        "word_count", "redirects", "links_detailed",
+    )
+    source_pages = {
+        page["url"]: {field: page.get(field) for field in fields}
+        for page in source["pages"]
+    }
+    replayed_pages = {
+        page["url"]: {field: page.get(field) for field in fields}
+        for page in replayed["pages"]
+    }
+    if source_pages != replayed_pages:
+        raise ReplayValidationError("replay page semantic parity mismatch")
+    if source["links"] != replayed["links"]:
+        raise ReplayValidationError("replay link semantic parity mismatch")
+    for field in (
+        "site_data", "sitemap_reconciliation", "crawl_completeness",
+        "provider_evidence",
+    ):
+        if source[field] != replayed[field]:
+            raise ReplayValidationError(f"replay {field} parity mismatch")
+    return ReplayParityResult(
+        "REPLAY_PARITY_PASS", len(replayed["pages"]), len(replayed["links"]),
+    )
+
+
 def validate_replay_document(
     document: dict,
     *,
@@ -697,7 +739,8 @@ def validate_replay_document(
     pages = document.get("pages")
     links = document.get("links")
     counts = document.get("counts")
-    if counts.get("pages") != len(pages) or counts.get("links") != len(links):
+    if (counts.get("page_count") != len(pages)
+            or counts.get("link_count") != len(links)):
         raise ReplayValidationError("replay count mismatch")
     allowed_page_fields = REPLAY_PAGE_FIELDS | {"response_headers"}
     for page in pages:

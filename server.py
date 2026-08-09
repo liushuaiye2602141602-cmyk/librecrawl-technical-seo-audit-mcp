@@ -145,7 +145,8 @@ def _parse_export(export) -> tuple:
     # Direct dict with known key
     for key in ("data", "urls", "pages"):
         if key in export and isinstance(export[key], list):
-            return export[key], []
+            links = export.get("links")
+            return export[key], links if isinstance(links, list) else []
 
     # Single-file format: {"content": "...", "filename": "librecrawl_export_*.json", "success": True}
     if "content" in export and "filename" in export:
@@ -153,9 +154,11 @@ def _parse_export(export) -> tuple:
         raw      = export.get("content", "")
         if "export" in filename and raw:
             try:
-                pages = _extract_from_parsed(_json.loads(raw))
+                parsed = _json.loads(raw)
+                pages = _extract_from_parsed(parsed)
                 if pages:
-                    return pages, []
+                    links = parsed.get("links") if isinstance(parsed, dict) else []
+                    return pages, links if isinstance(links, list) else []
             except Exception:
                 pass
 
@@ -271,6 +274,74 @@ def _ensure_crawler_ready() -> dict:
 
 # ── Site-level checks (robots, sitemap, HTTPS, www) ──────────────────────────
 
+def _parse_robots_txt(text: str) -> dict:
+    """Parse agent-aware robots evidence without flattening unrelated groups."""
+    groups = []
+    current_agents = []
+    current_disallow = []
+    sitemaps = []
+    crawl_delay = None
+
+    def flush_group():
+        nonlocal current_agents, current_disallow
+        if current_agents:
+            groups.append({
+                "user_agents": list(dict.fromkeys(current_agents)),
+                "disallow": list(current_disallow),
+            })
+        current_agents = []
+        current_disallow = []
+
+    for raw_line in str(text or "").splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if not line or ":" not in line:
+            continue
+        name, raw_value = line.split(":", 1)
+        name = name.strip().lower()
+        value = raw_value.strip()
+        if name == "user-agent":
+            if current_disallow:
+                flush_group()
+            current_agents.append(value.lower())
+        elif name == "disallow" and current_agents and value:
+            current_disallow.append(value)
+        elif name == "sitemap" and value:
+            sitemaps.append(value)
+        elif name == "crawl-delay" and crawl_delay is None:
+            crawl_delay = value
+    flush_group()
+
+    relevant_groups = []
+    for group in groups:
+        applicable = [agent for agent in group["user_agents"] if (
+            agent == "*" or agent.startswith("googlebot") or agent == "bingbot"
+        )]
+        blocked = [path for path in group["disallow"]
+                   if path in ("/", "/wp-admin", "/wp-login.php")]
+        if applicable and blocked:
+            relevant_groups.append({
+                "applicable_agents": applicable,
+                "blocked_paths": blocked,
+            })
+    important_blocked = list(dict.fromkeys(
+        path for item in relevant_groups for path in item["blocked_paths"]
+    ))
+    disallow_rules = [path for group in groups for path in group["disallow"]]
+    return {
+        "found": True,
+        "status": 200,
+        "disallow_count": len(disallow_rules),
+        "disallow_rules": disallow_rules[:20],
+        "groups": groups,
+        "important_blocked": important_blocked,
+        "important_blocked_evidence": relevant_groups,
+        "sitemap_declared": list(dict.fromkeys(sitemaps)),
+        "sitemap_url": sitemaps[0] if sitemaps else None,
+        "crawl_delay": crawl_delay,
+        "raw_preview": str(text or "")[:500],
+    }
+
+
 def _site_check(base_url: str) -> dict:
     """Fetch robots.txt, sitemap.xml, and check redirect behaviour."""
     parsed   = urlparse(base_url)
@@ -283,27 +354,7 @@ def _site_check(base_url: str) -> dict:
     try:
         r = httpx.get(f"{root}/robots.txt", timeout=10, follow_redirects=True)
         if r.status_code == 200:
-            txt      = r.text
-            lines    = txt.splitlines()
-            disallow = [l.split(":",1)[1].strip() for l in lines
-                        if l.lower().startswith("disallow:") and l.split(":",1)[1].strip()]
-            sitemaps = [l.split(":",1)[1].strip() for l in lines
-                        if l.lower().startswith("sitemap:")]
-            crawl_delay = next(
-                (l.split(":",1)[1].strip() for l in lines if l.lower().startswith("crawl-delay:")),
-                None
-            )
-            # Check if important paths are blocked
-            important_blocked = [d for d in disallow if d in ("/", "/wp-admin", "/wp-login.php")]
-            results["robots_txt"] = {
-                "found": True,
-                "disallow_count": len(disallow),
-                "disallow_rules": disallow[:20],
-                "important_blocked": important_blocked,
-                "sitemap_declared": sitemaps,
-                "crawl_delay": crawl_delay,
-                "raw_preview": txt[:500],
-            }
+            results["robots_txt"] = _parse_robots_txt(r.text)
         else:
             results["robots_txt"] = {"found": False, "status": r.status_code,
                                       "warning": "robots.txt missing — Googlebot has no crawl guidance."}
@@ -3754,6 +3805,85 @@ def _wipe_all_upstream_crawls() -> dict:
         counts["error"] = str(e)
     return counts
 
+def _build_current_run_zip(session: dict, artifacts: list[dict]) -> dict:
+    """Build a provenance-verified ZIP from one session registry only."""
+    import hashlib as _hl
+    import io as _io
+    import zipfile as _zf
+
+    required = {
+        "audit_replay", "coverage_csv", "task_csv", "manual_review_md",
+        "audit_score_json", "audit_snapshot", "master_report_md",
+        "master_report_pdf", "artifact_manifest",
+    }
+    by_kind = {artifact["kind"]: artifact for artifact in artifacts}
+    missing_required = sorted(required - set(by_kind))
+    if missing_required:
+        raise ValueError(
+            "missing required current-run artifacts: " + ", ".join(missing_required)
+        )
+    manifest_path = Path(by_kind["artifact_manifest"]["path"])
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError("invalid current-run artifact manifest") from exc
+    session_id = str(session.get("id") or "")
+    git_head = str(manifest.get("git_head") or "")
+    if manifest.get("session_id") != session_id or len(git_head) != 40:
+        raise ValueError("artifact manifest provenance mismatch")
+    manifest_entries = {
+        entry.get("artifact_type"): entry
+        for entry in manifest.get("artifacts", []) if isinstance(entry, dict)
+    }
+    for kind, artifact in by_kind.items():
+        if kind == "artifact_manifest":
+            continue
+        path = Path(artifact["path"])
+        entry = manifest_entries.get(kind)
+        if (not path.is_file() or not entry
+                or entry.get("artifact_name") != path.name
+                or entry.get("session_id") != session_id
+                or entry.get("git_head") != git_head
+                or entry.get("sha256") != _hl.sha256(path.read_bytes()).hexdigest()):
+            raise ValueError(f"artifact provenance mismatch: {kind}")
+
+    url = session.get("url", "")
+    summary_lines = [
+        "LibreCrawl MCP - Audit Bundle", "", f"Site:        {url}",
+        f"Session ID:  {session_id}", f"Git HEAD:    {git_head}",
+        f"Upstream ID: {session.get('upstream_crawl_id')}",
+        f"Pages:       {session.get('pages_done')}",
+        f"Audit complete: {bool(session.get('audit_complete'))}", "",
+        "Artifacts in this bundle:",
+    ]
+    for artifact in sorted(artifacts, key=lambda item: item["kind"]):
+        summary_lines.append(
+            f"  - {artifact['kind']:25s}  {Path(artifact['path']).name}"
+        )
+    summary_text = "\n".join(summary_lines) + "\n"
+    buffer = _io.BytesIO()
+    files_added = [{
+        "kind": "summary", "name": "SUMMARY.txt",
+        "bytes": len(summary_text.encode("utf-8")),
+    }]
+    with _zf.ZipFile(buffer, "w", compression=_zf.ZIP_DEFLATED, compresslevel=6) as archive:
+        archive.writestr("SUMMARY.txt", summary_text)
+        for artifact in sorted(artifacts, key=lambda item: item["kind"]):
+            path = Path(artifact["path"])
+            archive.write(path, arcname=path.name)
+            files_added.append({
+                "kind": artifact["kind"], "name": path.name,
+                "bytes": path.stat().st_size,
+            })
+    zip_bytes = buffer.getvalue()
+    return {
+        "zip_bytes": zip_bytes,
+        "sha256": _hl.sha256(zip_bytes).hexdigest(),
+        "files": files_added,
+        "summary_text": summary_text,
+    }
+
+
 @mcp.tool()
 def librecrawl_audit_zip(session_id: str, auto_cleanup: bool = True) -> dict:
     """
@@ -3803,6 +3933,10 @@ def librecrawl_audit_zip(session_id: str, auto_cleanup: bool = True) -> dict:
     arts = _state.list_artifacts(session_id)
     if not arts:
         return {"success": False, "error": "No artifacts registered for this session"}
+    try:
+        current_run_bundle = _build_current_run_zip(s, arts)
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
 
     # Build zip in memory
     buf = _io.BytesIO()
@@ -3846,8 +3980,9 @@ def librecrawl_audit_zip(session_id: str, auto_cleanup: bool = True) -> dict:
         "bytes": len(summary_text.encode("utf-8")),
     })
 
-    zip_bytes = buf.getvalue()
-    sha256 = _hl.sha256(zip_bytes).hexdigest()
+    zip_bytes = current_run_bundle["zip_bytes"]
+    sha256 = current_run_bundle["sha256"]
+    files_added = current_run_bundle["files"]
     filename = f"{domain}-{int(s.get('finished_at') or s.get('updated_at') or 0)}.zip"
     content_b64 = _b64.b64encode(zip_bytes).decode("ascii")
 

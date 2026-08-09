@@ -30,6 +30,7 @@ Usage:
 """
 
 from typing import Optional, Callable
+import json
 from dataclasses import dataclass, field
 
 from audit_rules.models import RuleDefinition, Finding
@@ -524,12 +525,20 @@ def _adapter_robots_txt(
             robots_data.get("important_blocked", [])
             if isinstance(robots_data, dict) else []
         )
+        block_evidence = (
+            robots_data.get("important_blocked_evidence", [])
+            if isinstance(robots_data, dict) else []
+        )
         # Prefer path-level production evidence. A high raw count can consist
         # entirely of bot-specific directives and is not SEO over-blocking.
         over_blocked = bool(important_blocked) if robots_data is not None else (
             site_ctx.robots_txt_disallow_count > 5
         )
         if over_blocked:
+            applicable_agents = list(dict.fromkeys(
+                agent for item in block_evidence
+                for agent in item.get("applicable_agents", [])
+            ))
             findings.append(_mk_finding(
                 rule, url=site_ctx.base_url,
                 detected=(
@@ -539,6 +548,12 @@ def _adapter_robots_txt(
                 ),
                 expected="Important crawlable paths are not blocked",
                 evidence=(
+                    json.dumps({
+                        "applicable_agents": applicable_agents,
+                        "blocked_paths": important_blocked,
+                        "robots_status": robots_data.get("status", 200),
+                    }, ensure_ascii=False, sort_keys=True)
+                    if block_evidence else
                     f"important_blocked={important_blocked}"
                     if important_blocked else
                     f"robots_txt_disallow_count={site_ctx.robots_txt_disallow_count}"
@@ -548,6 +563,24 @@ def _adapter_robots_txt(
                     if important_blocked else
                     f"High disallow count ({site_ctx.robots_txt_disallow_count}) — review for over-blocking"
                 ),
+            ))
+
+        sitemap_declared = (
+            robots_data.get("sitemap_declared", [])
+            if isinstance(robots_data, dict) else []
+        )
+        if (isinstance(robots_data, dict)
+                and "sitemap_declared" in robots_data
+                and not sitemap_declared):
+            findings.append(_mk_finding(
+                rule, url=site_ctx.base_url,
+                detected="No Sitemap declaration in robots.txt",
+                expected="At least one valid Sitemap: URL",
+                evidence=json.dumps({
+                    "robots_status": robots_data.get("status", 200),
+                    "sitemap_declared": [],
+                }, sort_keys=True),
+                detail="robots.txt does not declare a Sitemap URL",
             ))
 
     return findings

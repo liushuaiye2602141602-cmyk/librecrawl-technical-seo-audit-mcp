@@ -7,7 +7,7 @@ from pathlib import Path
 
 _REQUIRED = {
     "audit_replay", "coverage_csv", "task_csv", "manual_review_md", "audit_score_json",
-    "audit_snapshot", "master_report_md", "master_report_pdf",
+    "audit_snapshot", "master_report_md", "master_report_pdf", "artifact_manifest",
 }
 _PROVIDER_ARTIFACTS = {
     "PageSpeed API": "performance_csv",

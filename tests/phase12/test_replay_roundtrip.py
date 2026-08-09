@@ -84,7 +84,7 @@ def test_replay_writer_stably_sorts_and_loads_current_crawl_inputs(tmp_path):
     )
     assert loaded["schema_version"] == "1.0"
     assert loaded["artifact_type"] == "audit_replay"
-    assert loaded["counts"] == {"links": 1, "pages": 2}
+    assert loaded["counts"] == {"link_count": 1, "page_count": 2}
     assert [page["url"] for page in loaded["pages"]] == [
         "https://example.com/a", "https://example.com/z"]
     assert "unknown_future_field" not in loaded["pages"][1]

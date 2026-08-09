@@ -24,6 +24,7 @@ import threading
 import time
 import os
 import json
+import hashlib
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -44,6 +45,13 @@ UPSTREAM_HEALTH_TIMEOUT  = 600        # 10 min of no-progress → throttled
 HARD_DEADLINE_SECONDS    = 43200      # 12 hr ceiling — full polite crawls of
                                       # very large heavy sites can run for
                                       # hours; never abort a real audit early.
+
+
+_REQUIRED_MASTER_ARTIFACTS = frozenset({
+    "audit_replay", "coverage_csv", "task_csv", "manual_review_md",
+    "audit_score_json", "audit_snapshot", "master_report_md",
+    "master_report_pdf",
+})
 
 
 _runner_thread: threading.Thread | None = None
@@ -258,8 +266,10 @@ def _write_replay_artifact(
 ) -> Path | None:
     """Write, reload-validate, and register the current V3 replay input."""
     from audit_rules.replay import (
+        assert_replay_parity,
         build_provider_evidence,
         build_replay_document,
+        load_replay_artifact,
         write_replay_artifact,
     )
 
@@ -312,11 +322,17 @@ def _write_replay_artifact(
             expected_source_url=base_url,
             expected_completed_pages=len(pages),
         )
+        replayed = load_replay_artifact(
+            path,
+            expected_source_url=base_url,
+            expected_completed_pages=len(pages),
+        )
+        parity = assert_replay_parity(document, replayed)
         state.add_artifact(sid, "audit_replay", path)
-        import hashlib
         state.log_event(sid, "v3_replay_artifact_generated", {
             "pages": result.page_count,
             "links": result.link_count,
+            "parity": parity.status,
             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         })
         return path
@@ -328,6 +344,49 @@ def _write_replay_artifact(
             pass
         _record_v3_artifact_failure(sid, "audit_replay", exc)
         return None
+
+
+def _write_artifact_manifest(
+    sid: str,
+    base_url: str,
+    domain: str,
+    timestamp: str,
+    reports_dir: Path,
+    *,
+    git_head: str,
+    generated_at: str,
+) -> Path:
+    """Write current-session provenance for registered artifacts."""
+    rows = []
+    for artifact in state.list_artifacts(sid):
+        path = Path(artifact["path"])
+        if not path.is_file() or artifact["kind"] == "artifact_manifest":
+            continue
+        rows.append({
+            "artifact_name": path.name,
+            "artifact_type": artifact["kind"],
+            "generated_at": generated_at,
+            "git_head": git_head,
+            "session_id": sid,
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        })
+    rows.sort(key=lambda row: (row["artifact_type"], row["artifact_name"]))
+    manifest = {
+        "schema_version": "artifact-manifest-v1",
+        "artifact_type": "artifact_manifest",
+        "generated_at": generated_at,
+        "git_head": git_head,
+        "session_id": sid,
+        "source_url": base_url,
+        "artifacts": rows,
+    }
+    path = Path(reports_dir) / f"{domain}-{timestamp}.artifact-manifest.json"
+    path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    state.add_artifact(sid, "artifact_manifest", path)
+    return path
 
 
 # ── AIMD adaptive controller ──────────────────────────────────────────────────
@@ -874,6 +933,27 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
                 except Exception as exc:
                     # Task CSV is additive — failure must not impact audit
                     _record_v3_artifact_failure(sid, "task_csv", exc)
+
+                current_kinds = {
+                    artifact["kind"] for artifact in state.list_artifacts(sid)
+                }
+                if _REQUIRED_MASTER_ARTIFACTS.issubset(current_kinds):
+                    try:
+                        manifest_generated_at = (
+                            datetime.now(timezone.utc).isoformat()
+                            .replace("+00:00", "Z")
+                        )
+                        manifest_path = _write_artifact_manifest(
+                            sid, url, domain, timestamp, REPORTS_DIR,
+                            git_head=os.environ.get("AUDIT_GIT_HEAD", "").strip(),
+                            generated_at=manifest_generated_at,
+                        )
+                        state.log_event(sid, "v3_artifact_manifest_generated", {
+                            "path": str(manifest_path),
+                        })
+                    except Exception as exc:
+                        _record_v3_artifact_failure(
+                            sid, "artifact_manifest", exc)
     except Exception as e:
         # V3 shadow pipeline is strictly additive — a failure here MUST NOT
         # impact the existing audit artifacts (MD, PDF, CSVs, zip).
