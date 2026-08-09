@@ -98,6 +98,51 @@ def test_runner_writes_validated_replay_and_registers_complete_link_graph(
     }
 
 
+def test_runner_replay_persists_technology_profile(monkeypatch, tmp_path):
+    """The crawl-time technology profile must survive in the replay."""
+    import runner
+    from audit_rules.replay import load_replay_artifact
+
+    monkeypatch.setattr(
+        runner.state, "add_artifact",
+        lambda sid, kind, path: None)
+    monkeypatch.setattr(
+        runner.state, "log_event",
+        lambda sid, kind, detail=None: None)
+    monkeypatch.setenv("AUDIT_GIT_HEAD", "e" * 40)
+    data = _inputs()
+    profile = {
+        "schema_version": "technology-profile-v1",
+        "detector_version": "1.0.0",
+        "signature_registry_version": "1.0.0",
+        "source_url": "https://example.com/",
+        "detections": [{
+            "category": "Analytics",
+            "technology_name": "GA4",
+            "technology_type": "Analytics",
+            "status": "DETECTED",
+            "confidence": "High",
+            "version": "Unknown",
+            "detection_sources": [],
+        }],
+        "detection_status": "COMPLETE",
+    }
+    audit_runner = SimpleNamespace(
+        providers={}, last_shared_data={"technology_profile": profile})
+
+    path = runner._write_replay_artifact(
+        "session-1", "https://example.com/", "example.com", "20260809-0600",
+        tmp_path, audit_runner=audit_runner, **data)
+
+    loaded = load_replay_artifact(
+        path, expected_source_url="https://example.com/",
+        expected_completed_pages=2)
+    stored = loaded["technology_profile"]
+    assert stored["schema_version"] == "technology-profile-v1"
+    assert stored["detections"][0]["technology_name"] == "GA4"
+    assert stored["detections"][0]["status"] == "DETECTED"
+
+
 def test_runner_marks_replay_partial_and_does_not_register_invalid_output(
         monkeypatch, tmp_path):
     """A failed replay writer must not make the bundle appear complete."""

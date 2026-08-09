@@ -343,6 +343,9 @@ def _write_replay_artifact(
             sitemap_reconciliation=reconciliation,
             crawl_completeness=completeness,
             provider_evidence=build_provider_evidence(audit_runner),
+            technology_profile=(
+                (audit_runner.last_shared_data or {}).get(
+                    "technology_profile") or {}),
         )
         result = write_replay_artifact(
             document,
