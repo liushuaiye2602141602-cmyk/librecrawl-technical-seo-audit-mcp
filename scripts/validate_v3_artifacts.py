@@ -65,6 +65,7 @@ def run_validation(
         "MASTER_AUDIT_WORDPRESS_ENABLED", "MASTER_AUDIT_RENDER_ENABLED",
         "MASTER_AUDIT_AVAILABILITY_ENABLED", "MANUAL_REVIEW_INPUT_PATH",
         "AUDIT_SNAPSHOT_BASELINE_PATH", "AUDIT_SNAPSHOT_OUTPUT_DIR",
+        "AUDIT_GIT_HEAD",
     ]
     original_env = {name: os.environ.get(name) for name in env_names}
     was_enabled = integration.is_v3_enabled()
@@ -84,6 +85,7 @@ def run_validation(
             "MANUAL_REVIEW_INPUT_PATH": "",
             "AUDIT_SNAPSHOT_BASELINE_PATH": "",
             "AUDIT_SNAPSHOT_OUTPUT_DIR": str(target),
+            "AUDIT_GIT_HEAD": "f" * 40,
         })
         production_runner.state.add_artifact = (
             lambda sid, kind, path: registered.__setitem__(kind, Path(path)))
@@ -100,6 +102,32 @@ def run_validation(
             export_data=export, existing_data=snapshot_data,
             base_url="https://example.com")
         audit_runner = integration._get_runner()
+
+        production_runner._write_replay_artifact(
+            "validation", "https://example.com", "example.com", "validation",
+            target,
+            pages=export["pages"], links=export["links"],
+            site_data=export["site_check"],
+            reconciliation={
+                "sitemap_total": 1, "crawl_total": 1,
+                "sitemap_only": [], "crawl_only": [],
+            },
+            completeness={
+                "pages_crawled": 1, "audit_complete": True,
+                "max_pages": 1, "max_pages_hit": False,
+                "incomplete_reasons": [],
+            },
+            session={
+                "started_at": 1, "finished_at": 2,
+                "upstream_crawl_id": 1, "total_max_pages": 1,
+                "settings": {
+                    "chunk_target_pages": 1, "politeness": "polite",
+                    "fill_sitemap_orphans": True, "sitemap_fill_cap": 1,
+                },
+            },
+            fill_summary={"attempted": 0, "success_count": 0, "cap_hit": False},
+            audit_runner=audit_runner,
+        )
 
         coverage_path = target / "example.com-validation.coverage.csv"
         coverage_path.write_text(coverage_csv, encoding="utf-8")

@@ -25,7 +25,7 @@ import time
 import os
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 import state
 import libreclient
@@ -233,6 +233,96 @@ def _prepare_snapshot_artifacts(
         "snapshot_changes": changes,
         "snapshot_baseline_available": baseline_available,
     }
+
+
+def _write_replay_artifact(
+    sid: str,
+    base_url: str,
+    domain: str,
+    timestamp: str,
+    reports_dir: Path,
+    *,
+    pages: list[dict],
+    links: list[dict],
+    site_data: dict,
+    reconciliation: dict,
+    completeness: dict,
+    session: dict,
+    fill_summary: dict,
+    audit_runner,
+) -> Path | None:
+    """Write, reload-validate, and register the current V3 replay input."""
+    from audit_rules.replay import (
+        build_provider_evidence,
+        build_replay_document,
+        write_replay_artifact,
+    )
+
+    path = Path(reports_dir) / f"{domain}-{timestamp}.audit-replay-v1.json.gz"
+    try:
+        settings = session.get("settings", {}) or {}
+        crawl_parameters = {
+            "total_max_pages": int(session.get("total_max_pages", 0) or 0),
+            "chunk_target_pages": int(
+                session.get("chunk_target_pages",
+                            settings.get("chunk_target_pages", 0)) or 0),
+            "politeness": str(
+                session.get("politeness", settings.get("politeness", "")) or ""),
+            "fill_sitemap_orphans": bool(settings.get("fill_sitemap_orphans", True)),
+            "sitemap_fill_cap": int(settings.get("sitemap_fill_cap", 0) or 0),
+        }
+        generated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        truncation_status = (
+            "CRAWL_TRUNCATED_BY_ACCEPTANCE_SAFETY_LIMIT"
+            if completeness.get("max_pages_hit") else
+            "NOT_TRUNCATED"
+        )
+        document = build_replay_document(
+            source_url=base_url,
+            git_head=os.environ.get("AUDIT_GIT_HEAD", "").strip(),
+            generated_at=generated_at,
+            crawl_metadata={
+                "crawl_started_at": session.get("started_at"),
+                "crawl_completed_at": session.get("finished_at") or generated_at,
+                "upstream_crawl_id": session.get("upstream_crawl_id"),
+                "crawl_parameters": crawl_parameters,
+                "truncation_status": truncation_status,
+                "politeness": crawl_parameters["politeness"],
+                "sitemap_fill": {
+                    "enabled": crawl_parameters["fill_sitemap_orphans"],
+                    "cap": crawl_parameters["sitemap_fill_cap"],
+                    "result": fill_summary,
+                },
+            },
+            pages=pages,
+            links=links,
+            site_data=site_data,
+            sitemap_reconciliation=reconciliation,
+            crawl_completeness=completeness,
+            provider_evidence=build_provider_evidence(audit_runner),
+        )
+        result = write_replay_artifact(
+            document,
+            path,
+            expected_source_url=base_url,
+            expected_completed_pages=len(pages),
+        )
+        state.add_artifact(sid, "audit_replay", path)
+        import hashlib
+        state.log_event(sid, "v3_replay_artifact_generated", {
+            "pages": result.page_count,
+            "links": result.link_count,
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        })
+        return path
+    except Exception as exc:
+        try:
+            if path.exists():
+                path.unlink()
+        except OSError:
+            pass
+        _record_v3_artifact_failure(sid, "audit_replay", exc)
+        return None
 
 
 # ── AIMD adaptive controller ──────────────────────────────────────────────────
@@ -685,6 +775,18 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
                 completeness=completeness,
             )
             if coverage_csv:
+                from audit_rules.integration import _get_runner
+                _write_replay_artifact(
+                    sid, url, domain, timestamp, REPORTS_DIR,
+                    pages=pages,
+                    links=links or [],
+                    site_data=site_data,
+                    reconciliation=recon,
+                    completeness=completeness,
+                    session=sess,
+                    fill_summary=fill_summary,
+                    audit_runner=_get_runner(),
+                )
                 cov_path = REPORTS_DIR / f"{domain}-{timestamp}.coverage.csv"
                 cov_path.write_text(coverage_csv, encoding="utf-8")
                 state.add_artifact(sid, "coverage_csv", cov_path)

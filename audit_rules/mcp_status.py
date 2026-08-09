@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 _REQUIRED = {
-    "coverage_csv", "task_csv", "manual_review_md", "audit_score_json",
+    "audit_replay", "coverage_csv", "task_csv", "manual_review_md", "audit_score_json",
     "audit_snapshot", "master_report_md", "master_report_pdf",
 }
 _PROVIDER_ARTIFACTS = {

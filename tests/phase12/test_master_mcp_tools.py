@@ -40,3 +40,4 @@ def test_master_status_helper_aggregates_score_coverage_tasks_and_providers(tmp_
     assert result["task_count"] == 1
     assert result["providers"]["GSC API"] == "EVIDENCE_COLLECTED"
     assert result["artifacts_complete"] is False
+    assert "audit_replay" in result["missing_required_artifacts"]

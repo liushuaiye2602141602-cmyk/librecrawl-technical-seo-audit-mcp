@@ -81,6 +81,7 @@ services:
       - AVAILABILITY_MAX_AGE_HOURS=${AVAILABILITY_MAX_AGE_HOURS:-24}
       - AUDIT_SNAPSHOT_BASELINE_PATH=${AUDIT_SNAPSHOT_BASELINE_PATH:-}
       - AUDIT_SNAPSHOT_OUTPUT_DIR=${AUDIT_SNAPSHOT_OUTPUT_DIR:-/snapshots}
+      - AUDIT_GIT_HEAD=${AUDIT_GIT_HEAD:-}
     volumes:
       - ./reports:/reports
       # Write access is required for per-session auto_cleanup of upstream rows.

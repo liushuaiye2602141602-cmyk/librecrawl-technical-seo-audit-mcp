@@ -19,7 +19,7 @@ def test_validation_script_builds_real_applicable_artifacts_and_zip(tmp_path):
     assert result["zip_valid"] is True
     assert result["pdf_valid"] is True
     assert set(result["artifact_kinds"]) == {
-        "audit_score_json", "audit_snapshot", "coverage_csv",
+        "audit_replay", "audit_score_json", "audit_snapshot", "coverage_csv",
         "manual_review_md", "master_report_md", "master_report_pdf",
         "task_csv",
     }
