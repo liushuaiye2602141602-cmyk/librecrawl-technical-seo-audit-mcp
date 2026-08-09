@@ -521,14 +521,28 @@ def _adapter_robots_txt(
         ))
     else:
         robots_data = (site_ctx._site_data or {}).get("robots_txt")
-        important_blocked = (
-            robots_data.get("important_blocked", [])
-            if isinstance(robots_data, dict) else []
-        )
-        block_evidence = (
-            robots_data.get("important_blocked_evidence", [])
-            if isinstance(robots_data, dict) else []
-        )
+        if (isinstance(robots_data, dict)
+                and isinstance(robots_data.get("groups"), list)):
+            # Recompute the effective search-agent blocks from the preserved
+            # groups (RFC 9309 most-specific / last-match semantics) so that
+            # already-normalized replay inputs are judged with current-code
+            # evidence rather than a stale flattened parser result.
+            from audit_rules.robots_contract import effective_important_blocks
+
+            block_evidence = effective_important_blocks(robots_data.get("groups"))
+            important_blocked = list(dict.fromkeys(
+                path for item in block_evidence
+                for path in item.get("blocked_paths", [])
+            ))
+        else:
+            important_blocked = (
+                robots_data.get("important_blocked", [])
+                if isinstance(robots_data, dict) else []
+            )
+            block_evidence = (
+                robots_data.get("important_blocked_evidence", [])
+                if isinstance(robots_data, dict) else []
+            )
         # Prefer path-level production evidence. A high raw count can consist
         # entirely of bot-specific directives and is not SEO over-blocking.
         over_blocked = bool(important_blocked) if robots_data is not None else (

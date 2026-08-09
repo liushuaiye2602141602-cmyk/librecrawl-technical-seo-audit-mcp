@@ -276,53 +276,60 @@ def _ensure_crawler_ready() -> dict:
 
 def _parse_robots_txt(text: str) -> dict:
     """Parse agent-aware robots evidence without flattening unrelated groups."""
+    from audit_rules.robots_contract import effective_important_blocks
+
     groups = []
     current_agents = []
     current_disallow = []
+    current_allow = []
+    current_has_rules = False
     sitemaps = []
     crawl_delay = None
 
     def flush_group():
-        nonlocal current_agents, current_disallow
+        nonlocal current_agents, current_disallow, current_allow, current_has_rules
         if current_agents:
-            groups.append({
+            group = {
                 "user_agents": list(dict.fromkeys(current_agents)),
                 "disallow": list(current_disallow),
-            })
+            }
+            if current_allow:
+                group["allow"] = list(current_allow)
+            groups.append(group)
         current_agents = []
         current_disallow = []
+        current_allow = []
+        current_has_rules = False
 
     for raw_line in str(text or "").splitlines():
         line = raw_line.split("#", 1)[0].strip()
-        if not line or ":" not in line:
+        if not line:
+            # A blank line separates robots.txt groups (RFC 9309).
+            flush_group()
+            continue
+        if ":" not in line:
             continue
         name, raw_value = line.split(":", 1)
         name = name.strip().lower()
         value = raw_value.strip()
         if name == "user-agent":
-            if current_disallow:
+            # A new group starts when the current group already has rules.
+            if current_agents and current_has_rules:
                 flush_group()
             current_agents.append(value.lower())
         elif name == "disallow" and current_agents and value:
             current_disallow.append(value)
+            current_has_rules = True
+        elif name == "allow" and current_agents and value:
+            current_allow.append(value)
+            current_has_rules = True
         elif name == "sitemap" and value:
             sitemaps.append(value)
         elif name == "crawl-delay" and crawl_delay is None:
             crawl_delay = value
     flush_group()
 
-    relevant_groups = []
-    for group in groups:
-        applicable = [agent for agent in group["user_agents"] if (
-            agent == "*" or agent.startswith("googlebot") or agent == "bingbot"
-        )]
-        blocked = [path for path in group["disallow"]
-                   if path in ("/", "/wp-admin", "/wp-login.php")]
-        if applicable and blocked:
-            relevant_groups.append({
-                "applicable_agents": applicable,
-                "blocked_paths": blocked,
-            })
+    relevant_groups = effective_important_blocks(groups)
     important_blocked = list(dict.fromkeys(
         path for item in relevant_groups for path in item["blocked_paths"]
     ))
