@@ -1,7 +1,7 @@
 # Second Real-World Site Generalization Review
 
 **Site:** https://gelgoogsort.com/ · **Audit date:** 2026-08-10
-**Run:** `feat/technology-intelligence-v1` @ `9ff0268` (Technology Intelligence V1 + semantics lock)
+**Run:** `feat/technology-intelligence-v1` @ `904dcd6` (Technology Intelligence V1 + semantics + claim precision)
 **Crawl session:** `44d7ff51af874b00` · **Replay SHA-256:**
 `726b1545a2dce90209199e82dbeae7039db2db6eaf479b722e5811e64dfa83d1`
 
@@ -30,18 +30,17 @@ architecture. 228 pages crawled; URL architecture `/product/`, `/es/`,
 | Technology | Category | Status | Confidence |
 |---|---|---|---|
 | WordPress | CMS | DETECTED | High |
-| WooCommerce | Ecommerce | DETECTED | Medium |
-| Yoast SEO | SEO Technology | DETECTED | Low |
+| WooCommerce | Ecommerce | UNKNOWN | Medium |
+| Yoast SEO | SEO Technology | UNKNOWN | Low |
 | GA4 | Analytics | DETECTED | High |
 | GTM | Tag Manager | DETECTED | High |
 
 Two independent strong analytics fingerprints → High. WordPress: one strong
 `/wp-content/` family corroborated across 228 pages → High (0.82, bounded
-breadth boost, never 0.92). WooCommerce: URL-pattern family → Medium.
-Yoast: single weak `robots_meta` family → Low. The previous
-CONFLICTING/Low WordPress was a semantics bug (same-type different values
-treated as conflict) — fixed; no Webflow detection (broad weak signature
-removed).
+breadth boost, never 0.92). WooCommerce: generic `/product/` URL family →
+Medium but NOT vendor-specific → UNKNOWN observation (not confirmed).
+Yoast: single weak `robots_meta` family → Low → UNKNOWN observation (not
+confirmed). Claim precision: signal observed != technology confirmed.
 
 ## 4. 80 rules operational
 
@@ -128,6 +127,12 @@ hardcoded test fixture.
     provider evidence; performance rules EXECUTED_PARTIAL with sampled lab
     data, field/CrUX still absent (no real-user CWV PASS claimed); appendix
     statement derives from rule execution.
+12. **Claim precision** — Low confidence never produces DETECTED (stays an
+    UNKNOWN observation with evidence preserved); Medium evidence confirms
+    DETECTED only for registry-declared vendor-specific signatures
+    (`medium_confirms`); generic paths (WooCommerce `/product/`) stay
+    UNKNOWN. DOCX wording: UNKNOWN = "observable signals were found, but the
+    technology cannot be reliably confirmed"; Low = "observation only".
 
 ## 11. Technology Profile replay-rebuildable?
 
@@ -165,4 +170,4 @@ WordPress CONFLICTING case) but is not required for acceptance.
 **PASS.** Score 88.08 / 100 · Coverage 61.25% · Confidence High (84.79%).
 228/228 pages, NOT_TRUNCATED, replay 228 pages / 14,410 links, technology
 profile + risks in DOCX and `09_Technology_Profile.json`, final ZIP SHA-256
-`4dd26a4762f04987b029f23234708e561470bb29ca58409e83ce5fac3114350a`.
+`6084e2a7cbd8449876c83b8bdeb7531823b87b7e2208910480fc14194267bbe7`.
