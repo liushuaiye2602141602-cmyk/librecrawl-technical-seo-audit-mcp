@@ -88,6 +88,11 @@ def _build(tmp_path) -> Path:
                           "NOT_CHECKED": 25, "NOT_APPLICABLE": 10},
         manual_rows=[{"audit_id": i} for i in (53, 54, 55, 56, 57, 71, 72, 73, 70)],
         schema_distribution={"Organization": 315, "BreadcrumbList": 315},
+        domain="https://example.com/",
+        site_name="Example Co",
+        pages_crawled=315,
+        http_ok_pages=315,
+        audit_date="2026-08-09",
     )
     return output
 
@@ -234,3 +239,23 @@ def test_docx_audit2_partial_acceptance(tmp_path):
     assert "Automated/Crawl Acceptance" in text
     assert "External Validation" in text
     assert "GSC/Bing 已成功读取" not in text
+
+
+def test_docx_cross_site_no_baolai_hardcode(tmp_path):
+    """The DOCX builder must not leak first-site (Baolai) branding, page
+    counts, language prefixes, or hashtag assumptions into a second site."""
+    from docx import Document
+    doc = Document(str(_build(tmp_path)))
+    text = _all_text(doc)
+    for marker in ("Baolai", "packaging", "/hashtag/", "零内部链接 15 页",
+                   "309 页 / 3,011"):
+        assert marker not in text, f"cross-site leak: {marker}"
+    assert "Example Co" in text
+
+
+def test_docx_header_uses_site_name(tmp_path):
+    from docx import Document
+    doc = Document(str(_build(tmp_path)))
+    header_text = doc.sections[0].header.paragraphs[0].text
+    assert "Example Co — 80-Item Master SEO Diagnostic Report" in header_text
+    assert "Baolai" not in header_text

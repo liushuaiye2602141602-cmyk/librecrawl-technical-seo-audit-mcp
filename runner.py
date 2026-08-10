@@ -184,6 +184,34 @@ def _write_external_evidence_artifacts(
     return output
 
 
+def _write_technology_artifact(
+    sid: str,
+    shared_data: dict,
+    domain: str,
+    timestamp: str,
+    reports_dir: Path,
+) -> Path | None:
+    """Persist the additive 09_Technology_Profile.json machine artifact."""
+    from audit_rules.technology.artifact import (
+        TECHNOLOGY_ARTIFACT_KIND,
+        serialize_technology_artifact,
+    )
+
+    profile = shared_data.get("technology_profile") or {}
+    if not profile:
+        return None
+    payload = serialize_technology_artifact(
+        profile, risks=shared_data.get("technology_risks") or [])
+    path = Path(reports_dir) / f"{domain}-{timestamp}.technology-profile.json"
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+        + "\n",
+        encoding="utf-8",
+    )
+    state.add_artifact(sid, TECHNOLOGY_ARTIFACT_KIND, path)
+    return path
+
+
 def _prepare_snapshot_artifacts(
     sid: str,
     export_data: dict,
@@ -315,6 +343,9 @@ def _write_replay_artifact(
             sitemap_reconciliation=reconciliation,
             crawl_completeness=completeness,
             provider_evidence=build_provider_evidence(audit_runner),
+            technology_profile=(
+                (audit_runner.last_shared_data or {}).get(
+                    "technology_profile") or {}),
         )
         result = write_replay_artifact(
             document,
@@ -423,6 +454,7 @@ def _run_session(session: dict) -> None:
     chunk_no = state.chunk_count(sid)
     started_window = time.time()
     last_seen_crawled = session.get("pages_done", 0)
+    consecutive_done = 0
     total_max = session["total_max_pages"]
     sanity_cap = total_max if total_max > 0 else SANITY_CEILING_PAGES
     delay_ms = session["current_delay_ms"]
@@ -530,11 +562,14 @@ def _run_session(session: dict) -> None:
             started_window = time.time()
             last_seen_crawled = crawled
 
-        # Termination
-        done = (status_str == "completed") or (status_str == "idle" and crawled > 0) or (st.get("is_running") is False)
-        if done and crawled > 0:
+        # Termination — require consecutive terminal snapshots so the
+        # one-poll is_running=False blip right after start_crawl (start
+        # race) never aborts a real crawl after a handful of pages.
+        terminal, consecutive_done = _consecutive_terminal_reached(
+            st, consecutive_done)
+        if terminal and crawled > 0:
             break
-        if done and crawled == 0:
+        if terminal and crawled == 0:
             # Cross-check via DB before declaring failure
             try:
                 listing = libreclient.list_crawls()
@@ -894,6 +929,19 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
                     _record_v3_artifact_failure(sid, "external_artifacts", exc)
 
                 try:
+                    from audit_rules.integration import _get_runner
+                    technology_path = _write_technology_artifact(
+                        sid, _get_runner().last_shared_data, domain, timestamp,
+                        REPORTS_DIR)
+                    if technology_path is not None:
+                        state.log_event(sid, "v3_technology_artifact_generated", {
+                            "path": str(technology_path),
+                        })
+                except Exception as exc:
+                    _record_v3_artifact_failure(
+                        sid, "technology_profile_json", exc)
+
+                try:
                     if not settings.get("master_report_enabled", True):
                         raise RuntimeError(
                             "Master report disabled by AUDIT_MASTER_REPORT_ENABLED")
@@ -988,6 +1036,34 @@ def _finalize_session(sid: str, upstream_crawl_id: int, last_delay_ms: int,
 
 MAX_BOOT_REQUEUES = 3  # v2.1.1: a session that crashes the process this many
                        # times is poison — fail it instead of looping forever.
+
+
+def _snapshot_is_terminal(status: dict) -> bool:
+    """True when the upstream snapshot looks finished."""
+    return (
+        status.get("status_str") == "completed"
+        or (status.get("status_str") == "idle"
+            and (status.get("crawled") or 0) > 0)
+        or status.get("is_running") is False
+    )
+
+
+def _consecutive_terminal_reached(
+    status: dict, consecutive_done: int, *, minimum: int = 2,
+) -> tuple[bool, int]:
+    """Return (terminal_reached, updated_consecutive_count).
+
+    The upstream can briefly report ``is_running=False`` for a single poll
+    immediately after ``start_crawl`` (start race). Declaring the crawl
+    complete on that first snapshot aborts real crawls after a handful of
+    pages, so a terminal decision requires ``minimum`` consecutive terminal
+    snapshots.
+    """
+    if _snapshot_is_terminal(status):
+        consecutive_done += 1
+    else:
+        consecutive_done = 0
+    return consecutive_done >= minimum, consecutive_done
 
 
 def _worker_loop():

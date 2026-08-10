@@ -11,6 +11,7 @@ no content locking.
 from __future__ import annotations
 
 import re
+from dataclasses import asdict, is_dataclass
 from typing import Optional
 
 from docx import Document
@@ -154,7 +155,8 @@ def _header_footer(section, title_text: str) -> None:
     header.is_linked_to_previous = False
     p = header.paragraphs[0]
     p.text = ""
-    run = p.add_run("Baolai Packaging — 80-Item Master SEO Diagnostic Report")
+    run = p.add_run(
+        f"{title_text} — 80-Item Master SEO Diagnostic Report")
     run.font.size = Pt(8)
     run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
@@ -180,6 +182,80 @@ def _label(doc, label: str, value: str, heading: bool = False) -> None:
     r = p.add_run(label + " ")
     r.bold = True
     _safe_add(p, value)
+
+
+def _derive_top_issues(items: list[dict], limit: int = 8) -> list[str]:
+    """Derive the real top issues from the 80-item data (severity first,
+    then confirmed affected scope). No hardcoded site content."""
+    order = {"FAIL": 0, "WARNING": 1, "OPPORTUNITY": 2}
+    ranked = sorted(
+        (item for item in items
+         if item.get("result") in order
+         and item.get("execution") in ("EXECUTED_FULL", "EXECUTED_PARTIAL")),
+        key=lambda item: (
+            order.get(item["result"], 9),
+            -int(item.get("affected_urls") or 0),
+            item["audit_id"],
+        ),
+    )
+    lines = []
+    for item in ranked[:limit]:
+        affected = item.get("affected_urls") or 0
+        scope = f"{affected} 页/URL" if affected else "站点级"
+        lines.append(
+            f"#{item['audit_id']:02d} {item['check']}（{item['result']}，"
+            f"{scope}）")
+    return lines
+
+
+def _derive_health(items: list[dict], limit: int = 8) -> list[str]:
+    return [
+        f"#{item['audit_id']:02d} {item['check']}"
+        for item in items
+        if item.get("result") == "PASS"
+        and item.get("execution") in ("EXECUTED_FULL", "EXECUTED_PARTIAL")
+    ][:limit]
+
+
+def _derive_roadmap(task_rows: list[dict]) -> dict:
+    """Group tasks by task_type and rule for a data-driven 30-day roadmap."""
+    from collections import Counter, defaultdict
+
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for task in task_rows:
+        groups.setdefault(task.get("task_type", "MONITORING"), []).append(task)
+
+    def summarize(task_type: str, limit: int = 8) -> list[str]:
+        rows = groups.get(task_type, [])
+        counts: Counter = Counter()
+        for task in rows:
+            key = (task.get("audit_id", ""), task.get("rule_id", ""),
+                   task.get("finding", "")[:60])
+            counts[key] += 1
+        lines = []
+        for (audit_id, rule_id, finding), count in counts.most_common(limit):
+            lines.append(
+                f"Audit #{audit_id}（{rule_id}）：{count} 条 — {finding}")
+        return lines
+
+    return {
+        "remediation": summarize("REMEDIATION"),
+        "optimization": summarize("OPTIMIZATION"),
+        "data_required": summarize("DATA_REQUIRED", limit=6),
+        "manual": summarize("MANUAL_REVIEW", limit=6),
+    }
+
+
+def _derive_optimization(items: list[dict], limit: int = 8) -> list[str]:
+    ranked = sorted(
+        (item for item in items if item.get("result") == "OPPORTUNITY"
+         and item.get("execution") in ("EXECUTED_FULL", "EXECUTED_PARTIAL")),
+        key=lambda item: (-int(item.get("affected_urls") or 0), item["audit_id"]),
+    )
+    return [
+        f"#{item['audit_id']:02d} {item['check']}（{item.get('affected_urls') or 0} 页/URL）"
+        for item in ranked[:limit]
+    ]
 
 
 def _safe_add(paragraph, text: str) -> None:
@@ -295,6 +371,231 @@ def _summary_table(doc, rows: list[list[str]]) -> None:
             tc_pr.append(shd)
 
 
+_EVIDENCE_LABELS = {
+    "meta_generator": "Meta generator",
+    "script_src": "Script source",
+    "stylesheet_href": "Stylesheet",
+    "response_header": "Response header",
+    "asset_path": "Asset path",
+    "url_pattern": "URL pattern",
+    "analytics_fingerprint": "Analytics fingerprint",
+    "json_ld_type": "JSON-LD type",
+    "robots_meta": "Robots meta",
+    "cookie_name": "Cookie",
+}
+_SENSITIVE_MARKERS = (
+    "authorization", "bearer ", "basic ", "set-cookie", "cookie:",
+    "secret", "token=", "api-key", "apikey", "x-api-key",
+    "-----begin", "password", "credential",
+)
+
+
+def _client_safe_evidence_value(value: str) -> bool:
+    """Reject credential-looking strings before they reach client prose."""
+    lowered = str(value).strip().lower()
+    return not any(marker in lowered for marker in _SENSITIVE_MARKERS)
+
+
+def _client_evidence_lines(detection: dict) -> list[str]:
+    """Compact client evidence grouped by signal family.
+
+    At most three representative families with deduplicated source breadth;
+    the full structured evidence remains in 09_Technology_Profile.json.
+    """
+    sources = detection.get("detection_sources") or []
+    families: dict[str, list[dict]] = {}
+    for item in sources:
+        if is_dataclass(item):
+            item = asdict(item)
+        if not isinstance(item, dict):
+            continue
+        signal_value = str(item.get("signal_value") or "").strip()
+        if not signal_value or not _client_safe_evidence_value(signal_value):
+            continue
+        family = str(
+            item.get("pattern") or item.get("signal_type") or "evidence")
+        families.setdefault(family, []).append(item)
+    lines: list[str] = []
+    for items in families.values():
+        if len(lines) >= 3:
+            break
+        signal_type = str(items[0].get("signal_type") or "evidence")
+        label = _EVIDENCE_LABELS.get(signal_type, signal_type)
+        urls = {
+            str(item.get("source_url") or "")
+            for item in items if item.get("source_url")
+        }
+        breadth = f" across {len(urls)} pages" if len(urls) > 1 else ""
+        sample = str(items[0].get("signal_value") or "").strip()
+        if signal_type == "robots_meta":
+            lines.append(f"{label} observed{breadth} "
+                         "(SEO-plugin style output)")
+        elif signal_type == "asset_path":
+            lines.append(f"{label} observed{breadth}: {sample[:80]}")
+        else:
+            lines.append(f"{label} observed{breadth}: {sample[:60]}")
+    shown = sum(len(items) for items in
+                list(families.values())[:len(lines)]) if families else 0
+    if shown < len(sources):
+        lines.append(f"+{len(sources) - shown} additional evidence signals; "
+                     "see 09_Technology_Profile.json")
+    return lines
+
+
+def _technology_status_text(status: str) -> str:
+    """Client-safe status wording for the Technology Profile table."""
+    if status == "CONFLICTING":
+        return ("CONFLICTING — Technology use is not confirmed; credible "
+                "mutually-exclusive signals were observed.")
+    if status == "NOT_DETECTED":
+        return ("NOT_DETECTED — not observed from available evidence; "
+                "absence is not proven.")
+    if status == "UNKNOWN":
+        return ("UNKNOWN — observable signals were found, but the technology "
+                "cannot be reliably confirmed.")
+    return "DETECTED — sufficient observable evidence."
+
+
+def website_technology_profile(
+    doc: Document,
+    profile: dict | None,
+    risks: list[dict] | None,
+) -> None:
+    """Insert Website Technology Profile and Technology Risks sections."""
+    profile = profile or {}
+    risks = risks or []
+
+    _add_bookmark(_heading(doc, "Website Technology Profile", level=1),
+                  "TechnologyProfile")
+    detections = [
+        item for item in (profile.get("detections") or [])
+        if isinstance(item, dict)
+        and item.get("status") in ("DETECTED", "CONFLICTING", "UNKNOWN")
+    ]
+    if not detections:
+        doc.add_paragraph(
+            "No technologies were confirmed from the available observable "
+            "evidence. This does not prove a technology is absent.")
+    else:
+        tech_table = doc.add_table(rows=1, cols=6)
+        tech_table.style = "Table Grid"
+        for index, header in enumerate((
+                "Category", "Technology", "Status", "Version", "Confidence",
+                "Evidence")):
+            cell = tech_table.rows[0].cells[index]
+            cell.text = ""
+            run = cell.paragraphs[0].add_run(header)
+            run.bold = True
+            run.font.color.rgb = WHITE
+            run.font.size = Pt(9)
+            _set_cell_shading(cell, "0B3D6F")
+        _mark_header_row(tech_table.rows[0])
+        for detection in detections:
+            cells = tech_table.add_row().cells
+            values = [
+                detection.get("category", ""),
+                detection.get("technology_name", ""),
+                _technology_status_text(detection.get("status", "UNKNOWN")),
+                detection.get("version", "Unknown"),
+                (f"{detection.get('confidence', 'Low')} — observation only"
+                 if detection.get("confidence") == "Low"
+                 else detection.get("confidence", "Low")),
+                " / ".join(_client_evidence_lines(detection)),
+            ]
+            for index, value in enumerate(values):
+                cells[index].text = ""
+                _add_url_text(cells[index].paragraphs[0], str(value))
+                for run in cells[index].paragraphs[0].runs:
+                    run.font.size = Pt(9)
+        legend = doc.add_paragraph()
+        legend.add_run(
+            "Status semantics: DETECTED = sufficient observable evidence; "
+            "CONFLICTING = Technology use is not confirmed; credible "
+            "mutually-exclusive signals were observed; NOT_DETECTED = not "
+            "observed, absence is not proven; UNKNOWN = cannot be reliably "
+            "determined. Low confidence never confirms a technology.")
+        status = profile.get("detection_status") or "COMPLETE"
+        if status != "COMPLETE":
+            p = doc.add_paragraph()
+            p.add_run(f"Detection status: {status}. ")
+            reason = profile.get("detection_reason") or ""
+            if reason:
+                p.add_run(str(reason))
+
+    _add_bookmark(
+        _heading(doc, "Technology Risks & Recommendations", level=1),
+        "TechnologyRisks")
+    if not risks:
+        doc.add_paragraph(
+            "No confirmed technology-specific risks were detected from the "
+            "available observable evidence.")
+    else:
+        risk_table = doc.add_table(rows=1, cols=5)
+        risk_table.style = "Table Grid"
+        for index, header in enumerate((
+                "Technology", "Observation / Confirmed Risk", "Mapped Audit",
+                "Impact", "Recommended Action")):
+            cell = risk_table.rows[0].cells[index]
+            cell.text = ""
+            run = cell.paragraphs[0].add_run(header)
+            run.bold = True
+            run.font.color.rgb = WHITE
+            run.font.size = Pt(9)
+            _set_cell_shading(cell, "0B3D6F")
+        _mark_header_row(risk_table.rows[0])
+        for risk in risks:
+            cells = risk_table.add_row().cells
+            mapped = ", ".join(
+                f"#{int(audit_id)}"
+                for audit_id in (risk.get("mapped_audit_ids") or []))
+            observation_status = risk.get("observation_status", "UNKNOWN")
+            observation_confidence = risk.get(
+                "observation_confidence", "Low")
+            if (observation_status in ("UNKNOWN", "NOT_DETECTED")
+                    or observation_confidence == "Low"):
+                observation = "Observation / Not confirmed"
+            else:
+                observation = (
+                    f"{observation_status} "
+                    f"(confidence {observation_confidence})")
+            values = [
+                risk.get("technology", ""),
+                observation,
+                mapped,
+                risk.get("impact", ""),
+                risk.get("recommended_action", ""),
+            ]
+            for index, value in enumerate(values):
+                cells[index].text = ""
+                _add_url_text(cells[index].paragraphs[0], str(value))
+                for run in cells[index].paragraphs[0].runs:
+                    run.font.size = Pt(9)
+
+
+_PSI_RULES = frozenset({19, 21, 22, 24, 61, 62, 63})
+
+
+def _psi_appendix_note(items: list[dict]) -> str:
+    """Derive the PSI statement from actual rule execution (source of truth).
+
+    Partial execution means the provider really produced sampled lab data;
+    NOT_CHECKED means provider data was absent and no PSI claim is made.
+    """
+    psi_items = [item for item in items if item["audit_id"] in _PSI_RULES]
+    partial = [item for item in psi_items
+               if item.get("execution") == "EXECUTED_PARTIAL"]
+    not_checked = [item for item in psi_items
+                   if item.get("execution") == "NOT_CHECKED"]
+    if partial:
+        return ("PSI sampled lab data recorded as partial execution "
+                "(field/CrUX data unavailable); no real-user CWV PASS is "
+                "claimed. ")
+    if not_checked:
+        return ("PageSpeed/PSI provider data unavailable; performance rules "
+                "remain NOT_CHECKED and no PSI success is claimed. ")
+    return ""
+
+
 def _static_toc(doc, entries: list[tuple[str, str]]) -> None:
     _heading(doc, "Table of Contents", level=1)
     for label, bookmark in entries:
@@ -328,10 +629,19 @@ def build_docx(
     execution_counts: dict,
     manual_rows: list[dict],
     schema_distribution: dict,
-    domain: str = "https://www.baolaipackaging.com/",
+    technology_profile: dict | None = None,
+    technology_risks: list[dict] | None = None,
+    domain: str = "",
     audit_date: str = "2026-08-09",
+    site_name: str = "",
+    pages_crawled: int = 0,
+    http_ok_pages: int = 0,
 ) -> str:
     """Build the native Word diagnostic report."""
+    from urllib.parse import urlsplit
+
+    hostname = urlsplit(domain or "https://example.com/").hostname or ""
+    site_name = site_name or (hostname or "Website")
     doc = Document()
     _configure_styles(doc)
 
@@ -339,7 +649,7 @@ def build_docx(
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.paragraph_format.space_before = Pt(140)
-    title_run = p.add_run("Baolai Packaging")
+    title_run = p.add_run(site_name)
     title_run.font.name = "Segoe UI"
     title_run.font.size = Pt(34)
     title_run.font.bold = True
@@ -354,7 +664,7 @@ def build_docx(
         ("Domain", domain),
         ("Audit Date", audit_date),
         ("Scope", "Full-site technical SEO diagnosis — 80 checks"),
-        ("Pages Crawled", "315"),
+        ("Pages Crawled", str(pages_crawled)),
         ("Prepared by", "Master SEO Audit System"),
     ]:
         mp = doc.add_paragraph()
@@ -365,12 +675,12 @@ def build_docx(
     # Management Summary starts a new page via pageBreakBefore (no blank page).
 
     # ---------- Header / footer (applies to all sections) ----------
-    _header_footer(doc.sections[0], "Baolai Packaging")
+    _header_footer(doc.sections[0], site_name)
 
     # ---------- Management Summary ----------
     _add_bookmark(_heading(doc, "Management Summary", level=1), "ManagementSummary")
     doc.add_paragraph(
-        f"本次对 {domain} 执行 80 项技术 SEO 诊断（315 页真实爬取）。"
+        f"本次对 {domain} 执行 80 项技术 SEO 诊断（{pages_crawled} 页真实爬取）。"
         "状态分布如下（Result 与 Execution 分开统计，合计均为 80）。")
     _label(doc, "Result Distribution:", "")
     res_table = doc.add_table(rows=1, cols=2)
@@ -409,25 +719,29 @@ def build_docx(
     cells[0].text = "合计"
     cells[1].text = "80"
     doc.add_paragraph()
+    roadmap_data = _derive_roadmap(task_rows)
+    doc.add_paragraph("必须修（Confirmed Issues — REMEDIATION）：")
+    for line in roadmap_data["remediation"][:5]:
+        doc.add_paragraph(line, style="List Bullet")
+    doc.add_paragraph("建议优化（Optimization Opportunities）：")
+    for line in _derive_optimization(items, limit=6):
+        doc.add_paragraph(line, style="List Bullet")
     doc.add_paragraph(
-        "必须修（Confirmed Issues — REMEDIATION）：#11/#45 零内部链接 15 页（合并 1 个动作）、"
-        "#15 缺失 H1 10 页（先决策 /hashtag/ 归档索引策略）、#13 确认重复标题、"
-        "#79 缺失 ALT 属性 309 页。")
+        f"数据缺口（Data / Validation Gaps）：{metrics.get('data_required', 0)} 条 "
+        "DATA_REQUIRED 动作；提供对应外部数据源（GSC/Semrush/GA4/日志/RUM/WP 快照/"
+        "渲染/可用性）后重新评估。")
     doc.add_paragraph(
-        "建议优化（Optimization Opportunities）：#29 x-default（315 页）、#13 标题宽度 heuristic、"
-        "#18 hashtag 策略、#19 实验室性能、#14 Meta、#24 移动可用性。")
-    doc.add_paragraph(
-        "数据缺口（Data / Validation Gaps）：GSC/Semrush/GA4/服务器日志/WP 快照/渲染/可用性未提供，"
-        "含 #20 TTFB（需字段 TTFB/RUM/日志）。")
-    doc.add_paragraph(
-        "人工评审（Manual Review）：9 条动作（8 条核心规则 #53–57/#71–73 + "
-        "#70 表单可访问性部分人工验证）。")
-    doc.add_paragraph(
-        "基础健康层：robots、状态码、canonical、重定向、sitemap、死链、Schema、安全头均 PASS。")
+        f"人工评审（Manual Review）：{metrics.get('manual_review_actions', 0)} 条动作"
+        "（核心规则 + 部分人工验证项，详见 Manual Review 章节）。")
+    health = _derive_health(items)
+    if health:
+        doc.add_paragraph("基础健康层（PASS 示例）：" + "、".join(health) + "。")
     # ---------- Static TOC ----------
     _static_toc(doc, [
         ("Management Summary", "ManagementSummary"),
         ("Executive Summary", "ExecutiveSummary"),
+        ("Website Technology Profile", "TechnologyProfile"),
+        ("Technology Risks & Recommendations", "TechnologyRisks"),
         ("80-Item Diagnostic Summary", "SummaryTable"),
         ("Full 80-Item Diagnosis", "FullDiagnosis"),
         ("30-Day Remediation Roadmap", "Roadmap"),
@@ -450,7 +764,9 @@ def build_docx(
         ("SEO Health Score", f"{metrics['score']} / 100"),
         ("Audit Coverage", f"{metrics['coverage_pct']}%"),
         ("Result Confidence", f"High（{metrics['confidence_pct']}%）"),
-        ("Pages Crawled", "315（全部 HTTP 200，sitemap 100%）"),
+        ("Pages Crawled",
+         f"{pages_crawled}"
+         + (f"（{http_ok_pages} 页 HTTP 200）" if http_ok_pages else "")),
         ("确认整改任务（REMEDIATION）", str(metrics["confirmed_remediation"])),
         ("优化机会（OPTIMIZATION）", str(metrics["optimization"])),
         ("数据缺口（DATA_REQUIRED）", str(metrics["data_required"])),
@@ -460,17 +776,17 @@ def build_docx(
         cells[0].text = label
         cells[1].text = value
     doc.add_paragraph()
-    doc.add_paragraph(
-        "网站最大的实际问题（按诊断结果）：#11/#45 内部链接（15 页零入链）、"
-        "#15 H1（10 页）、#79 图片 ALT（309 页 / 3,011 实例候选）、"
-        "#13 标题（44 页）、#19 性能（实验室 LCP 5.3–6.8s，无字段数据）、"
-        "#29 hreflang x-default（315 页机会项）、#18 归档策略（10 页）。")
-    doc.add_paragraph(
-        "健康领域：robots、状态码、canonical、重定向、sitemap、内部死链、"
-        "Schema（Organization/BreadcrumbList 等真实分布）、安全头均 PASS。")
+    doc.add_paragraph("网站最大的实际问题（按诊断结果）：")
+    for line in _derive_top_issues(items):
+        doc.add_paragraph(line, style="List Bullet")
+    health = _derive_health(items, limit=8)
+    if health:
+        doc.add_paragraph("健康领域（PASS 示例）：" + "、".join(health) + "。")
+    # ---------- Website Technology Profile + Risks (portrait) ----------
+    website_technology_profile(doc, technology_profile, technology_risks)
     # ---------- Summary table (landscape) ----------
     landscape = _new_landscape_section(doc)
-    _header_footer(landscape, "Baolai Packaging")
+    _header_footer(landscape, site_name)
     _add_bookmark(_heading(doc, "80-Item Diagnostic Summary", level=1), "SummaryTable")
     rows = []
     for item in items:
@@ -489,7 +805,7 @@ def build_docx(
 
     # ---------- Full 80-Item Diagnosis (portrait) ----------
     portrait = _new_portrait_section(doc)
-    _header_footer(portrait, "Baolai Packaging")
+    _header_footer(portrait, site_name)
     _add_bookmark(_heading(doc, "Full 80-Item Diagnosis", level=1), "FullDiagnosis")
     for item in items:
         heading = doc.add_heading(f"AUDIT #{item['audit_id']:02d}", level=2)
@@ -572,28 +888,16 @@ def build_docx(
 
     # ---------- Roadmap ----------
     _add_bookmark(_heading(doc, "30-Day Remediation Roadmap", level=1), "Roadmap")
+    roadmap_data = _derive_roadmap(task_rows)
     for section_title, lines in [
-        ("Confirmed Remediation（0–14 天）", [
-            "#11/#45（合并）：为 15 个零内链产品页补充 HTML 内链。",
-            "#15：先决策 10 个 /hashtag/ 归档页索引策略，再补 H1 或 noindex。",
-            "#13 重复标题、#79 缺失 ALT（309 页）按页整改。",
-        ]),
-        ("Optimization（14–30 天）", [
-            "#29 x-default（315 页）、#18 hashtag 策略（10 页）、#14 Meta（35 条）。",
-            "#19 实验室 LCP 优化（4 模板）、#24 移动可用性（4 页）、#13 宽度 heuristic（43 条）。",
-        ]),
-        ("Data Access & Validation（独立通道）", [
-            "接入 GSC/Semrush/GA4/日志/WP 快照/渲染/可用性；#20 TTFB 需字段 TTFB/RUM/日志；#19 需 CrUX。",
-        ]),
-        ("Manual Review（独立通道）", [
-            "9 条人工评审动作（8 条核心 + #70 部分人工验证）。",
-        ]),
-        ("Continuous", [
-            "建立 Rule 74 基线，每月/每季度巡检（内部建议）。",
-        ]),
+        ("Confirmed Remediation（0–14 天）", roadmap_data["remediation"]),
+        ("Optimization（14–30 天）", roadmap_data["optimization"]),
+        ("Data Access & Validation（独立通道）", roadmap_data["data_required"]),
+        ("Manual Review（独立通道）", roadmap_data["manual"]),
+        ("Continuous", ["建立 Rule 74 基线，每月/每季度巡检（内部建议）。"]),
     ]:
         doc.add_heading(section_title, level=2)
-        for line in lines:
+        for line in lines or ["（无）"]:
             doc.add_paragraph(line, style="List Bullet")
 
     # ---------- Responsibility Matrix ----------
@@ -645,10 +949,11 @@ def build_docx(
     # ---------- Technical Appendix ----------
     _add_bookmark(_heading(doc, "Technical Appendix", level=1), "TechnicalAppendix")
     doc.add_paragraph(
-        "数据来源：2026-08-09 受控生产爬取（315 页，全部 HTTP 200）+ 离线 replay 重建（当前规则引擎）。")
+        f"数据来源：{audit_date} 受控生产爬取（{pages_crawled} 页）"
+        "+ 离线 replay 重建（当前规则引擎）。")
     doc.add_paragraph(
         "诊断质量修正：80 项复核，20 项语义/状态修正；无已知系统误报；无 missing-data PASS；"
-        "PSI 采样记为部分执行；#20 TTFB 无 lab-proxy 整改任务；#11/#45 整改去重；"
+        f"{_psi_appendix_note(items)}#20 TTFB 无 lab-proxy 整改任务；#11/#45 整改去重；"
         "#70 部分人工验证。")
     doc.add_paragraph(
         "replay/snapshot/manifest 与内部校验见 Technical_Appendix 目录。")

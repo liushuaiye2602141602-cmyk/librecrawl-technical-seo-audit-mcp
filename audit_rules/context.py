@@ -84,6 +84,11 @@ class PageContext:
     image_summary: Optional[dict] = None    # {count, broken, missing_alt, oversized}
     hreflang_summary: Optional[list[dict]] = None  # [{lang, url}] — compact
     json_ld_types: Optional[list[str]] = None      # ["Organization", "BreadcrumbList", ...]
+    # Technology Intelligence signals (local, evidence-first).
+    allowlisted_headers: Optional[dict] = None      # safe response headers only
+    scripts: list = field(default_factory=list)     # script[src] from source HTML
+    stylesheets: list = field(default_factory=list)  # link[rel=stylesheet][href]
+    meta_generator: Optional[str] = None            # meta[name=generator]
 
     # Link graph references (lightweight: url + metadata, not full HTML)
     links_detailed: Optional[list[dict]] = None   # [{url, anchor, is_internal, rel}]
@@ -184,6 +189,25 @@ class PageContext:
             for h in hreflang
         ] if isinstance(hreflang, list) else []
 
+        # Technology Intelligence signals (local, from already-downloaded HTML).
+        raw_headers = page_dict.get("response_headers") or page_dict.get("headers")
+        if isinstance(raw_headers, dict):
+            from audit_rules.replay import sanitize_response_headers
+            allowlisted_headers = sanitize_response_headers(raw_headers) or {}
+        else:
+            allowlisted_headers = {}
+        scripts = [
+            str(item) for item in (page_dict.get("scripts") or [])
+            if isinstance(item, str) and item.strip()
+        ]
+        stylesheets = [
+            str(item) for item in (page_dict.get("stylesheets") or [])
+            if isinstance(item, str) and item.strip()
+        ]
+        meta_generator = (
+            page_dict.get("meta_generator") or page_dict.get("generator") or None
+        )
+
         json_ld = page_dict.get("json_ld") or page_dict.get("structured_data") or []
         json_ld_types = _extract_json_ld_types(json_ld)
 
@@ -214,6 +238,10 @@ class PageContext:
             image_summary=image_summary,
             hreflang_summary=hreflang_summary,
             json_ld_types=json_ld_types,
+            allowlisted_headers=allowlisted_headers,
+            scripts=scripts,
+            stylesheets=stylesheets,
+            meta_generator=meta_generator,
             links_detailed=links,
             linked_from_count=len(page_dict.get("linked_from") or []),
             internal_links_count=internal_count,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import copy
 from dataclasses import asdict, dataclass, is_dataclass
 import gzip
 import json
@@ -11,6 +12,8 @@ from pathlib import Path
 import re
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
+
+from audit_rules.technology.models import profile_to_jsonable
 
 
 SCHEMA_VERSION = "1.0"
@@ -30,6 +33,15 @@ SAFE_RESPONSE_HEADERS = frozenset({
     "x-content-type-options",
     "x-frame-options",
     "x-robots-tag",
+    # Technology Intelligence observable server/edge headers.
+    "server",
+    "via",
+    "x-powered-by",
+    "cf-ray",
+    "cf-cache-status",
+    "x-cache",
+    "x-served-by",
+    "x-generator",
 })
 
 # Current LibreCrawl EXPORT_FIELDS, sitemap-fill additions, and normalized
@@ -43,6 +55,7 @@ REPLAY_PAGE_FIELDS = frozenset({
     "mixed_content_urls", "og_tags", "redirects", "response_time_ms", "robots",
     "size", "source", "status_code", "structured_data", "title", "twitter_tags",
     "url", "viewport", "word_count",
+    "allowlisted_headers", "scripts", "stylesheets",
 })
 
 REPLAY_LINK_FIELDS = frozenset({
@@ -322,7 +335,9 @@ def _page_record(page: dict) -> dict:
     }
     headers = page.get("response_headers") or page.get("headers")
     if headers is not None:
-        record["response_headers"] = sanitize_response_headers(headers)
+        safe_headers = sanitize_response_headers(headers)
+        record["response_headers"] = safe_headers
+        record["allowlisted_headers"] = safe_headers
     if isinstance(record.get("links_detailed"), list):
         record["links_detailed"] = [
             _page_link_record(item) for item in record["links_detailed"]
@@ -413,6 +428,7 @@ def build_replay_document(
     sitemap_reconciliation: dict,
     crawl_completeness: dict,
     provider_evidence: dict | None = None,
+    technology_profile: dict | None = None,
 ) -> dict:
     """Build a stable v1 replay document from current normalized inputs."""
     page_records = sorted(
@@ -437,6 +453,8 @@ def build_replay_document(
         "sitemap_reconciliation": _sanitize_json(sitemap_reconciliation),
         "crawl_completeness": _sanitize_json(crawl_completeness),
         "provider_evidence": _sanitize_json(provider_evidence or {}),
+        "technology_profile": _sanitize_json(
+            profile_to_jsonable(technology_profile or {})),
     }
 
 
@@ -663,6 +681,66 @@ def replay_pipeline_inputs(document: dict) -> tuple[dict, dict]:
     return export_data, existing_data
 
 
+def reconstruct_technology_profile(
+    document: dict,
+    *,
+    current_detector_version: str | None = None,
+    current_signature_registry_version: str | None = None,
+) -> dict:
+    """Reconstruct a client-safe technology profile fully offline.
+
+    The versioned replay snapshot is the primary source: detections are
+    preserved as collected. If the snapshot predates the current detector or
+    signature registry, that mismatch is recorded in ``limitations`` instead
+    of silently mixing versions. When no snapshot exists, detection runs only
+    against replayed crawl evidence (never a live API or provider).
+    """
+    validate_replay_document(document)
+    stored = document.get("technology_profile") or {}
+    if stored.get("detections"):
+        profile = copy.deepcopy(stored)
+        limitations = list(profile.get("limitations") or [])
+        if (current_detector_version
+                and profile.get("detector_version") != current_detector_version):
+            limitations.append(
+                f"replay snapshot detector_version="
+                f"{profile.get('detector_version')} differs from current "
+                f"detector_version={current_detector_version}; detections "
+                "preserved from the stored snapshot.")
+        if (current_signature_registry_version
+                and profile.get("signature_registry_version")
+                != current_signature_registry_version):
+            limitations.append(
+                f"replay snapshot signature_registry_version="
+                f"{profile.get('signature_registry_version')} differs from "
+                f"current signature_registry_version="
+                f"{current_signature_registry_version}; detections preserved "
+                "from the stored snapshot.")
+        if limitations:
+            profile["limitations"] = limitations
+        return profile
+    from audit_rules.providers.librecrawl_provider import LibreCrawlDataProvider
+    from audit_rules.technology.detector import LocalTechnologyDetector
+    from audit_rules.technology.signatures import load_default_registry
+
+    export_data, _ = replay_pipeline_inputs(document)
+    provider = LibreCrawlDataProvider(
+        export_data["pages"], export_data["site_check"], export_data["links"])
+    site_ctx, page_contexts = provider.create_contexts(
+        document["source_url"], export_data["completeness"])
+    detector = LocalTechnologyDetector(
+        registry=load_default_registry(),
+        source_url=document["source_url"],
+        git_head=document.get("git_head") or "",
+    )
+    profile = detector.detect(page_contexts, site_ctx)
+    profile["limitations"] = list(profile.get("limitations") or []) + [
+        "Technology profile reconstructed offline from replay crawl evidence "
+        "(no stored snapshot was available)."
+    ]
+    return profile
+
+
 def run_replay_pipeline(document: dict):
     """Execute the real RuleRunner without network or credential access."""
     from audit_rules.registry import load_registry
@@ -711,7 +789,7 @@ def assert_replay_parity(source: dict, replayed: dict) -> ReplayParityResult:
         raise ReplayValidationError("replay link semantic parity mismatch")
     for field in (
         "site_data", "sitemap_reconciliation", "crawl_completeness",
-        "provider_evidence",
+        "provider_evidence", "technology_profile",
     ):
         if source[field] != replayed[field]:
             raise ReplayValidationError(f"replay {field} parity mismatch")

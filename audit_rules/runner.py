@@ -14,6 +14,7 @@ Usage:
 """
 
 from dataclasses import dataclass, field
+import os
 from typing import Optional
 
 from audit_rules.models import RuleDefinition, Finding, CoverageRow
@@ -83,6 +84,39 @@ class RuleRunner:
         # Step 1: Create contexts from LibreCrawl data
         librecrawl = LibreCrawlDataProvider(pages, site_data, links)
         site_ctx, page_contexts = librecrawl.create_contexts(base_url, completeness)
+
+        # Step 1b: Technology Intelligence — local detection feeds the profile
+        # and CMS applicability (never a new rule, never a score input).
+        try:
+            from audit_rules.technology.applicability import (
+                cms_applicability_decision,
+            )
+            from audit_rules.technology.detector import LocalTechnologyDetector
+            from audit_rules.technology.risks import TechnologyRiskCorrelator
+            from audit_rules.technology.signatures import load_default_registry
+
+            detector = LocalTechnologyDetector(
+                registry=load_default_registry(),
+                source_url=base_url,
+                git_head=os.environ.get("AUDIT_GIT_HEAD", "").strip(),
+            )
+            technology_profile = detector.detect(page_contexts, site_ctx)
+            existing_data["technology_profile"] = technology_profile
+            existing_data["technology_risks"] = (
+                TechnologyRiskCorrelator().correlate(technology_profile)
+            )
+            site_profile = cms_applicability_decision(technology_profile)
+            if site_profile == "wordpress_remote":
+                site_ctx.site_profile = site_profile
+        except Exception:
+            # Technology Intelligence failure must never fail the audit.
+            existing_data["technology_profile"] = {
+                "schema_version": "technology-profile-v1",
+                "detections": [],
+                "detection_status": "DETECTION_INCOMPLETE",
+                "not_detected_technologies": [],
+            }
+            existing_data["technology_risks"] = []
 
         # The integration layer caches RuleRunner across audits. PSI cache is
         # audit-scoped evidence and must not leak URLs or results between sites.
