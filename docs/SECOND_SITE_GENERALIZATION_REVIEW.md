@@ -1,9 +1,9 @@
 # Second Real-World Site Generalization Review
 
 **Site:** https://gelgoogsort.com/ · **Audit date:** 2026-08-10
-**Run:** `feat/technology-intelligence-v1` @ `f1ab038` (Technology Intelligence V1)
+**Run:** `feat/technology-intelligence-v1` @ `9ff0268` (Technology Intelligence V1 + semantics lock)
 **Crawl session:** `44d7ff51af874b00` · **Replay SHA-256:**
-`2a43b7075d716a60ae5faa90b64ec95184efc14d9ed6c1c0b9fa229ba5319728`
+`726b1545a2dce90209199e82dbeae7039db2db6eaf479b722e5811e64dfa83d1`
 
 ---
 
@@ -29,15 +29,19 @@ architecture. 228 pages crawled; URL architecture `/product/`, `/es/`,
 
 | Technology | Category | Status | Confidence |
 |---|---|---|---|
-| WordPress | CMS | CONFLICTING | Low |
-| WooCommerce | Ecommerce | CONFLICTING | Low |
+| WordPress | CMS | DETECTED | High |
+| WooCommerce | Ecommerce | DETECTED | Medium |
 | Yoast SEO | SEO Technology | DETECTED | Low |
 | GA4 | Analytics | DETECTED | High |
 | GTM | Tag Manager | DETECTED | High |
 
-Two independent strong analytics fingerprints → High. Single weak
-`robots_meta` signal → Low. Conflicting CMS signals (WordPress + WooCommerce
-cross-category conflict) → CONFLICTING / Low.
+Two independent strong analytics fingerprints → High. WordPress: one strong
+`/wp-content/` family corroborated across 228 pages → High (0.82, bounded
+breadth boost, never 0.92). WooCommerce: URL-pattern family → Medium.
+Yoast: single weak `robots_meta` family → Low. The previous
+CONFLICTING/Low WordPress was a semantics bug (same-type different values
+treated as conflict) — fixed; no Webflow detection (broad weak signature
+removed).
 
 ## 4. 80 rules operational
 
@@ -48,9 +52,11 @@ only.
 
 ## 5. CMS applicability correct?
 
-**YES.** WordPress detection is CONFLICTING/Low → observation only per the
-confidence gate → #36–39/#64–69 stay NOT_APPLICABLE (site profile remains
-generic). WordPress detection never auto-PASSed or auto-FAILed any rule.
+**YES.** WordPress is DETECTED/High → site profile `wordpress_remote` →
+#36–39/#64–69 become applicable. Remote-observable rules #37/#38/#39/#67
+EXECUTED_FULL (PASS from crawl evidence); privileged-data rules
+#36/#64/#65/#66/#68/#69 stay NOT_CHECKED/UNKNOWN (no privileged snapshot).
+WordPress detection never auto-PASSed a rule.
 
 ## 6. Rules still requiring privileged data
 
@@ -80,9 +86,9 @@ hardcoded test fixture.
 
 ## 9. Generic false positives found
 
-- Webflow signature `script_src /assets/.*\.js` (weak) can fire on any site
-  with an `/assets/` JS bundle — low-confidence only, flagged as a known weak
-  signature, not a confirmed claim.
+- Webflow signature `script_src /assets/.*\.js` (weak) could fire on any site
+  with an `/assets/` JS bundle — removed and locked by
+  `generic_assets_js_is_not_webflow`.
 - Upstream crawler start race aborted the first crawl attempt after 9–40
   pages; fixed generically (see #10).
 - #39 XML-RPC/REST API observation counted as a client finding on a
@@ -103,6 +109,25 @@ hardcoded test fixture.
    Detailed Findings rows; all NOT_APPLICABLE rows are zeroed.
 5. **Optional performance artifact** — PSI provider unavailable/timeout no
    longer breaks report generation; gap is recorded in metrics.
+6. **Technology conflict semantics** — same signal type with different values
+   (multiple URLs/pages) is corroborating evidence, never a conflict;
+   CONFLICTING now requires credible mutually-exclusive candidates or a
+   declared strong negative signal; weak competitors never poison strong
+   detections (regressions in `test_technology_semantics.py`).
+7. **Family-based confidence** — strong signals are counted per independent
+   signature pattern; many same-pattern instances get a bounded breadth
+   boost only (never impersonate independent fingerprints).
+8. **Negative signals consumed** — WordPress vs Webflow/Shopify
+   `meta_generator` conflicts are evaluated by the detector.
+9. **Webflow false positive** — broad `/assets/.*\.js` weak signature
+   removed; `generic_assets_js_is_not_webflow` regression added.
+10. **Replay-derived report counts** — DOCX sitemap/lastmod/page/remote-
+    observation counts come from the current run's replay; stale
+    previous-site counts eliminated (regressions in `test_report_data_lock.py`).
+11. **PSI source of truth** — real lab snapshots wired into the replay
+    provider evidence; performance rules EXECUTED_PARTIAL with sampled lab
+    data, field/CrUX still absent (no real-user CWV PASS claimed); appendix
+    statement derives from rule execution.
 
 ## 11. Technology Profile replay-rebuildable?
 
@@ -137,7 +162,7 @@ WordPress CONFLICTING case) but is not required for acceptance.
 
 ## 15. SECOND_SITE_ACCEPTANCE
 
-**PASS.** Score 85.94 / 100 · Coverage 54.29% · Confidence High (85.19%).
+**PASS.** Score 88.08 / 100 · Coverage 61.25% · Confidence High (84.79%).
 228/228 pages, NOT_TRUNCATED, replay 228 pages / 14,410 links, technology
 profile + risks in DOCX and `09_Technology_Profile.json`, final ZIP SHA-256
-`f319bdd1606816a8acc8bc93c7596ab85d6561e4d32b4d65275e625d7368d4bd`.
+`4dd26a4762f04987b029f23234708e561470bb29ca58409e83ce5fac3114350a`.
