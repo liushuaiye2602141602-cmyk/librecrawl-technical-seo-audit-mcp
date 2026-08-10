@@ -177,11 +177,20 @@ def _finding_rows(findings: list[Finding], limit: int = 20) -> list[str]:
     return rows or ["| — | PASS | — | — | No actionable findings in this section. |"]
 
 
+def report_host(base_url: str) -> str:
+    """Derive the report site identity from the audited URL.
+
+    Site identity comes from the URL (or the replay source_url when
+    rebuilding offline) — never from a customer-domain constant.
+    """
+    return urlsplit(base_url).hostname or base_url or "unknown-site"
+
+
 def build_master_report(base_url: str, findings: list[Finding],
                         coverage_rows: list[CoverageRow]) -> str:
     """Build a deterministic report that keeps quality, coverage, and confidence separate."""
     score = compute_audit_score(findings, coverage_rows).to_dict()
-    host = urlsplit(base_url).hostname or base_url or "unknown-site"
+    host = report_host(base_url)
     statuses = Counter(_value(row.execution_status) for row in coverage_rows)
     results = Counter(_value(row.result_status) for row in coverage_rows)
     priority_levels = {"Critical": "P0", "High": "P1", "Medium": "P2", "Low": "P3"}
