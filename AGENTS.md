@@ -34,3 +34,20 @@ behavioral guidance for the technology intelligence layer lives in
    values, debug reprs, or internal scope tokens.
 10. **No Audit #81.** A new capability never expands the audit count. It is
     expressed as evidence, applicability, risk correlation, or an artifact.
+11. **One universal report contract.** Every site produces the same report
+    architecture (Universal Master SEO Diagnostic Report). Site technology,
+    scale, language, CMS, and issue counts change content/data only, never
+    the report structure.
+12. **Current-run-only.** Any audit run may use only the current run, current
+    replay, current provider evidence, and current site metadata. Never fall
+    back to previous client state, module-global client caches, static
+    previous-site counts, or historical default domains.
+13. **Client-safe and shareable.** Client reports hide raw internals, local
+    paths, tokens, secrets, and other clients' data; they never hide real
+    issues. `REPORT_AUDIENCE=client` (default) and `internal` share the same
+    diagnosis results.
+14. **Actionable remediation.** Every confirmed FAIL/WARNING answers: what is
+    wrong, where, why it matters, how to fix, who fixes it, and how to verify
+    it is fixed. PASS items still show what was checked and why they pass.
+15. **Presentation never changes diagnosis.** Report wording, labels, or
+    audience mode never change Rule Result, Coverage, Score, or Findings.
