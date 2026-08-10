@@ -72,6 +72,13 @@ class LocalTechnologyDetector:
                     affected_urls=list(dict.fromkeys(
                         e.source_url for e in matched)),
                 )
+                # Claim precision: Medium evidence confirms DETECTED only for
+                # vendor-specific signatures declared medium_confirms; generic
+                # paths (e.g. WooCommerce /product/) stay an UNKNOWN
+                # observation with the evidence preserved.
+                if (detection.confidence_score < 0.8
+                        and not signature.medium_confirms):
+                    detection.status = DetectionStatus.UNKNOWN.value
                 detections.append(detection)
             self._apply_negative_signal_conflicts(detections, pages, corpora)
             self._apply_cross_category_conflicts(detections)

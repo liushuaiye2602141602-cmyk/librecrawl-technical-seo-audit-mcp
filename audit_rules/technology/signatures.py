@@ -32,6 +32,7 @@ class TechnologySignature:
     version_extractor: dict | None = None
     confidence_contribution: float | None = None
     applicability_requirement: str | None = None
+    medium_confirms: bool = False
     notes: str = ""
 
 
@@ -74,6 +75,7 @@ class TechnologySignatureRegistry:
             version_extractor=version_extractor,
             confidence_contribution=spec.get("confidence_contribution"),
             applicability_requirement=spec.get("applicability_requirement"),
+            medium_confirms=bool(spec.get("medium_confirms", False)),
             notes=str(spec.get("notes") or ""),
         )
 

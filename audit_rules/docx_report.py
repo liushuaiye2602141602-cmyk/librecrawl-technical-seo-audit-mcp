@@ -451,7 +451,8 @@ def _technology_status_text(status: str) -> str:
         return ("NOT_DETECTED — not observed from available evidence; "
                 "absence is not proven.")
     if status == "UNKNOWN":
-        return "UNKNOWN — cannot be reliably determined."
+        return ("UNKNOWN — observable signals were found, but the technology "
+                "cannot be reliably confirmed.")
     return "DETECTED — sufficient observable evidence."
 
 
@@ -469,7 +470,7 @@ def website_technology_profile(
     detections = [
         item for item in (profile.get("detections") or [])
         if isinstance(item, dict)
-        and item.get("status") in ("DETECTED", "CONFLICTING")
+        and item.get("status") in ("DETECTED", "CONFLICTING", "UNKNOWN")
     ]
     if not detections:
         doc.add_paragraph(
@@ -496,7 +497,9 @@ def website_technology_profile(
                 detection.get("technology_name", ""),
                 _technology_status_text(detection.get("status", "UNKNOWN")),
                 detection.get("version", "Unknown"),
-                detection.get("confidence", "Low"),
+                (f"{detection.get('confidence', 'Low')} — observation only"
+                 if detection.get("confidence") == "Low"
+                 else detection.get("confidence", "Low")),
                 " / ".join(_client_evidence_lines(detection)),
             ]
             for index, value in enumerate(values):
@@ -545,10 +548,16 @@ def website_technology_profile(
             mapped = ", ".join(
                 f"#{int(audit_id)}"
                 for audit_id in (risk.get("mapped_audit_ids") or []))
-            observation = (
-                f"{risk.get('observation_status', 'UNKNOWN')} "
-                f"(confidence {risk.get('observation_confidence', 'Low')})"
-            )
+            observation_status = risk.get("observation_status", "UNKNOWN")
+            observation_confidence = risk.get(
+                "observation_confidence", "Low")
+            if (observation_status in ("UNKNOWN", "NOT_DETECTED")
+                    or observation_confidence == "Low"):
+                observation = "Observation / Not confirmed"
+            else:
+                observation = (
+                    f"{observation_status} "
+                    f"(confidence {observation_confidence})")
             values = [
                 risk.get("technology", ""),
                 observation,

@@ -29,6 +29,7 @@ SIGNATURES = {
             "pattern": r"WordPress ([\d.]+)",
         },
         "applicability_requirement": "STRONG_2",
+        "medium_confirms": True,
         "notes": "drives CMS rule applicability only at High/STRONG_2",
     },
     "WooCommerce": {
@@ -46,7 +47,7 @@ SIGNATURES = {
              "strength": "weak"},
         ],
         "version_extractor": {"type": "regex", "pattern": r"WooCommerce ([\d.]+)"},
-    },
+        "medium_confirms": False},
     "Shopify": {
         "category": "CMS",
         "technology_type": "Ecommerce",
@@ -62,7 +63,7 @@ SIGNATURES = {
             {"type": "url_pattern", "pattern": r"/collections/",
              "strength": "weak"},
         ],
-    },
+        "medium_confirms": True},
     "Webflow": {
         "category": "CMS",
         "technology_type": "CMS",
@@ -72,7 +73,7 @@ SIGNATURES = {
             {"type": "response_header", "pattern": r"^webflow",
              "strength": "medium"},
         ],
-    },
+        "medium_confirms": True},
     "Avada": {
         "category": "Theme",
         "technology_type": "Theme",
@@ -82,7 +83,7 @@ SIGNATURES = {
             {"type": "meta_generator", "pattern": r"Avada",
              "strength": "medium"},
         ],
-    },
+        "medium_confirms": True},
     "Astra": {
         "category": "Theme",
         "technology_type": "Theme",
@@ -92,7 +93,7 @@ SIGNATURES = {
             {"type": "meta_generator", "pattern": r"Astra",
              "strength": "medium"},
         ],
-    },
+        "medium_confirms": True},
     "Elementor": {
         "category": "Page Builder",
         "technology_type": "Page Builder",
@@ -105,7 +106,7 @@ SIGNATURES = {
             {"type": "meta_generator", "pattern": r"Elementor",
              "strength": "medium"},
         ],
-    },
+        "medium_confirms": True},
     "Yoast SEO": {
         "category": "SEO Technology",
         "technology_type": "SEO Plugin",
@@ -119,7 +120,7 @@ SIGNATURES = {
              "pattern": r"max-image-preview:large",
              "strength": "weak"},
         ],
-    },
+        "medium_confirms": False},
     "Rank Math": {
         "category": "SEO Technology",
         "technology_type": "SEO Plugin",
@@ -130,7 +131,7 @@ SIGNATURES = {
              "pattern": r"/wp-content/plugins/seo-by-rank-math/",
              "strength": "strong"},
         ],
-    },
+        "medium_confirms": True},
     "GA4": {
         "category": "Analytics",
         "technology_type": "Analytics",
@@ -140,7 +141,7 @@ SIGNATURES = {
             {"type": "script_src", "pattern": r"/gtag/js\?id=G-",
              "strength": "strong"},
         ],
-    },
+        "medium_confirms": True},
     "GTM": {
         "category": "Tag Manager",
         "technology_type": "Tag Manager",
@@ -150,7 +151,7 @@ SIGNATURES = {
             {"type": "script_src", "pattern": r"/gtm\.js\?id=",
              "strength": "strong"},
         ],
-    },
+        "medium_confirms": True},
     "Meta Pixel": {
         "category": "Advertising Pixel",
         "technology_type": "Pixel",
@@ -160,7 +161,7 @@ SIGNATURES = {
             {"type": "script_src", "pattern": r"/tr\?id=",
              "strength": "strong"},
         ],
-    },
+        "medium_confirms": True},
     "Cloudflare": {
         "category": "CDN",
         "technology_type": "Edge/CDN",
@@ -172,7 +173,7 @@ SIGNATURES = {
             {"type": "response_header", "pattern": r"^server[:=].*cloudflare",
              "strength": "medium"},
         ],
-    },
+        "medium_confirms": True},
     "nginx": {
         "category": "Web Server",
         "technology_type": "Web Server",
@@ -182,7 +183,7 @@ SIGNATURES = {
             {"type": "response_header", "pattern": r"^server[:=].*openresty",
              "strength": "medium"},
         ],
-    },
+        "medium_confirms": True},
     "Apache": {
         "category": "Web Server",
         "technology_type": "Web Server",
@@ -190,7 +191,7 @@ SIGNATURES = {
             {"type": "response_header", "pattern": r"^server[:=].*apache",
              "strength": "strong"},
         ],
-    },
+        "medium_confirms": True},
     "LiteSpeed": {
         "category": "Web Server",
         "technology_type": "Web Server",
@@ -200,7 +201,7 @@ SIGNATURES = {
             {"type": "response_header", "pattern": r"^x-litespeed-cache$",
              "strength": "strong"},
         ],
-    },
+        "medium_confirms": True},
     "jQuery": {
         "category": "JavaScript Library",
         "technology_type": "JS Library",
@@ -210,5 +211,5 @@ SIGNATURES = {
             {"type": "asset_path", "pattern": r"/wp-includes/js/jquery",
              "strength": "strong"},
         ],
-    },
+        "medium_confirms": True},
 }

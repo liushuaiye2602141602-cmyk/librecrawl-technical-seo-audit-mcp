@@ -85,7 +85,10 @@ def test_different_urls_same_signal_type_are_not_conflict():
     profile = _detector(pages)
     woo = _by_name(profile).get("WooCommerce")
     assert woo is not None
-    assert woo["status"] == "DETECTED"
+    # Generic /product/ URLs are not a vendor-specific confirmation: the
+    # observation is preserved as UNKNOWN/Medium, not DETECTED.
+    assert woo["status"] == "UNKNOWN"
+    assert woo["confidence"] == "Medium"
     assert woo["conflicting_signals"] == []
 
 

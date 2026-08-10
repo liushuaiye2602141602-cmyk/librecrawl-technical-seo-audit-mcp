@@ -18,8 +18,8 @@ from typing import Any, Optional
 
 
 SCHEMA_VERSION = "technology-profile-v1"
-DETECTOR_VERSION = "1.1.0"
-SIGNATURE_REGISTRY_VERSION = "1.1.0"
+DETECTOR_VERSION = "1.2.0"
+SIGNATURE_REGISTRY_VERSION = "1.2.0"
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -173,6 +173,12 @@ class TechnologyDetection:
         else:
             self.base_confidence_score = (
                 self.base_confidence_score or self.confidence_score)
+        # Claim precision: Low confidence never confirms a technology.
+        # A DETECTED claim requires evidence sufficient for the client
+        # statement "technology detected"; Low stays an UNKNOWN observation.
+        if (self.status == DetectionStatus.DETECTED.value
+                and confidence_label(self.confidence_score) == "Low"):
+            self.status = DetectionStatus.UNKNOWN.value
 
 
 @dataclass
