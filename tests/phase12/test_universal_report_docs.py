@@ -15,7 +15,7 @@ def test_skill_doc_exists():
     text = path.read_text(encoding="utf-8")
     assert text.strip()
     assert "80" in text
-    assert "#81" not in text
+    assert "Never add Audit #81" in text
 
 
 def test_agents_universal_invariants_present():
