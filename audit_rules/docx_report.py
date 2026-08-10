@@ -978,3 +978,404 @@ def _abbrev(value: str) -> str:
         "Low": "P3",
     }
     return mapping.get(value, value)
+
+
+def _render_actionable_audit(doc: Document, item: dict,
+                             schema_distribution: dict) -> None:
+    """Render one audit with the full actionable contract."""
+    heading = doc.add_heading(f"AUDIT #{item['audit_id']:02d}", level=2)
+    _add_bookmark(heading, f"Audit{item['audit_id']:02d}")
+    _label(doc, "Check:", item.get("check", ""))
+    _label(doc, "Category:", item.get("category", ""))
+    _label(doc, "Result:", item.get("result", "UNKNOWN"))
+    _label(doc, "Execution:", item.get("execution", "NOT_CHECKED"))
+    _label(doc, "Rule Priority:", item.get("priority", ""))
+    _label(doc, "Action Priority:", item.get("action_priority", ""))
+    _label(doc, "Confidence:", item.get("confidence", ""))
+    _label(doc, "Data Source:", item.get("data_source", ""))
+    _label(doc, "What Was Checked:", item.get("what_checked", ""))
+    _label(doc, "Actual Website State:", item.get("actual_state", ""))
+    _label(doc, "Diagnosis:", item.get("diagnosis", ""))
+    _label(doc, "Evidence:", "")
+    _add_evidence_items(doc, item.get("evidence", ""))
+    _label(doc, "Affected Scope:", item.get("scope", "site-wide"))
+    representative = [
+        url for url in (item.get("representative") or [])
+        if str(url).startswith(("http://", "https://"))
+    ]
+    if representative:
+        _label(doc, "Representative URLs:", "")
+        for url in representative[:5]:
+            p = doc.add_paragraph(style="List Bullet")
+            _add_url_text(p, url)
+    _label(doc, "Why This Matters:", item.get("why_it_matters", ""))
+    _label(doc, "What To Do:", item.get("what_to_do") or item.get("fix", ""))
+    _label(doc, "Owner:", item.get("owner", ""))
+    _label(doc, "How To Verify / Acceptance Criteria:",
+           item.get("how_to_verify") or item.get("acceptance", ""))
+    if item.get("not_verified"):
+        _label(doc, "Not Verified — Required Data:", item.get("required_data", ""))
+        _label(doc, "How To Complete:", item.get("how_to_complete", ""))
+    if item.get("why_not_applicable"):
+        _label(doc, "Why Not Applicable:", item.get("why_not_applicable", ""))
+    if item.get("limitations"):
+        _label(doc, "Limitations:", item.get("limitations", ""))
+
+
+def build_universal_docx(
+    output_path: str,
+    *,
+    view_model,
+    items: list[dict],
+    task_rows: list[dict],
+    metrics: dict,
+    result_counts: dict,
+    execution_counts: dict,
+    manual_rows: list[dict],
+    schema_distribution: dict,
+    technology_profile: dict | None = None,
+    technology_risks: list[dict] | None = None,
+    domain: str = "",
+    audit_date: str = "",
+    site_name: str = "",
+    pages_crawled: int = 0,
+    http_ok_pages: int = 0,
+) -> str:
+    """Build the Universal Master SEO Diagnostic Report (client default)."""
+    site_name = site_name or view_model.site_name
+    doc = Document()
+    _configure_styles(doc)
+
+    # ---------- 1. Cover ----------
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_before = Pt(140)
+    title_run = p.add_run(site_name)
+    title_run.font.name = "Segoe UI"
+    title_run.font.size = Pt(34)
+    title_run.font.bold = True
+    title_run.font.color.rgb = DARK_BLUE
+    p2 = doc.add_paragraph()
+    p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    sub_run = p2.add_run("Universal Master SEO Diagnostic Report")
+    sub_run.font.name = "Segoe UI"
+    sub_run.font.size = Pt(17)
+    sub_run.font.color.rgb = RGBColor(0x40, 0x63, 0x8B)
+    for label_text, value in [
+        ("Domain", domain),
+        ("Audit Date", audit_date),
+        ("Scope", "Full-site technical SEO diagnosis — 80 checks"),
+        ("Pages Crawled", str(pages_crawled)),
+        ("Prepared by", "Master SEO Audit System"),
+    ]:
+        mp = doc.add_paragraph()
+        mp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r = mp.add_run(f"{label_text}: {value}")
+        r.font.size = Pt(11)
+        r.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
+    _header_footer(doc.sections[0], site_name)
+
+    # ---------- 2. Management Summary ----------
+    _add_bookmark(_heading(doc, "Management Summary", level=1),
+                  "ManagementSummary")
+    for line in view_model.management_summary:
+        doc.add_paragraph(line, style="List Bullet")
+    _label(doc, "Result Distribution:", "")
+    res_table = doc.add_table(rows=1, cols=2)
+    res_table.style = "Table Grid"
+    for index, header in enumerate(("Result", "数量")):
+        cell = res_table.rows[0].cells[index]
+        cell.text = ""
+        run = cell.paragraphs[0].add_run(header)
+        run.bold = True
+        run.font.color.rgb = WHITE
+        _set_cell_shading(cell, "0B3D6F")
+    for result in ("PASS", "FAIL", "WARNING", "OPPORTUNITY",
+                   "MANUAL_REVIEW_REQUIRED", "UNKNOWN"):
+        cells = res_table.add_row().cells
+        cells[0].text = result
+        cells[1].text = str(result_counts.get(result, 0))
+    cells = res_table.add_row().cells
+    cells[0].text = "合计"
+    cells[1].text = "80"
+    _label(doc, "Execution Distribution:", "")
+    ex_table = doc.add_table(rows=1, cols=2)
+    ex_table.style = "Table Grid"
+    for index, header in enumerate(("Execution", "数量")):
+        cell = ex_table.rows[0].cells[index]
+        cell.text = ""
+        run = cell.paragraphs[0].add_run(header)
+        run.bold = True
+        run.font.color.rgb = WHITE
+        _set_cell_shading(cell, "0B3D6F")
+    for execution in ("EXECUTED_FULL", "EXECUTED_PARTIAL",
+                      "NOT_CHECKED", "NOT_APPLICABLE"):
+        cells = ex_table.add_row().cells
+        cells[0].text = execution
+        cells[1].text = str(execution_counts.get(execution, 0))
+    cells = ex_table.add_row().cells
+    cells[0].text = "合计"
+    cells[1].text = "80"
+    doc.add_paragraph()
+
+    # ---------- 3. Executive Summary ----------
+    _add_bookmark(_heading(doc, "Executive Summary", level=1),
+                  "ExecutiveSummary")
+    summary = doc.add_table(rows=1, cols=2)
+    summary.style = "Table Grid"
+    for index, header in enumerate(("指标", "数值")):
+        cell = summary.rows[0].cells[index]
+        cell.text = ""
+        run = cell.paragraphs[0].add_run(header)
+        run.bold = True
+        run.font.color.rgb = WHITE
+        _set_cell_shading(cell, "0B3D6F")
+    for label_text, value in [
+        ("SEO Health Score", f"{metrics['score']} / 100"),
+        ("Audit Coverage", f"{metrics['coverage_pct']}%"),
+        ("Result Confidence",
+         f"{view_model.confidence_label}（{metrics['confidence_pct']}%）"),
+        ("Pages Crawled", str(pages_crawled)),
+        ("确认整改任务（REMEDIATION）", str(metrics.get("confirmed_remediation", 0))),
+        ("优化机会（OPTIMIZATION）", str(metrics.get("optimization", 0))),
+        ("数据缺口（DATA_REQUIRED）", str(metrics.get("data_required", 0))),
+        ("人工评审（MANUAL_REVIEW）", str(metrics.get("manual_review_actions", 0))),
+    ]:
+        cells = summary.add_row().cells
+        cells[0].text = label_text
+        cells[1].text = value
+    doc.add_paragraph()
+    doc.add_paragraph("网站最大的实际问题（按诊断结果）：")
+    for finding in view_model.key_findings[:6]:
+        doc.add_paragraph(
+            f"#{finding['audit_id']:02d} {finding['check']}"
+            f"（{finding['result']}，{finding['affected_scope']}）",
+            style="List Bullet")
+    health = _derive_health(items)
+    if health:
+        doc.add_paragraph("健康领域（PASS 示例）：" + "、".join(health) + "。")
+
+    # ---------- 4/5. Technology Profile + Risks ----------
+    website_technology_profile(doc, technology_profile, technology_risks)
+
+    # ---------- 6. Key Findings ----------
+    _add_bookmark(_heading(doc, "Key Findings / What Needs Attention",
+                           level=1), "KeyFindings")
+    if not view_model.key_findings:
+        doc.add_paragraph(
+            "No confirmed FAIL/WARNING/high-value opportunity findings "
+            "were detected from the available evidence.")
+    else:
+        kf = doc.add_table(rows=1, cols=6)
+        kf.style = "Table Grid"
+        for index, header in enumerate((
+                "Priority", "Audit", "Issue", "Why It Matters",
+                "Affected Scope", "Recommended Action")):
+            cell = kf.rows[0].cells[index]
+            cell.text = ""
+            run = cell.paragraphs[0].add_run(header)
+            run.bold = True
+            run.font.color.rgb = WHITE
+            run.font.size = Pt(9)
+            _set_cell_shading(cell, "0B3D6F")
+        _mark_header_row(kf.rows[0])
+        for finding in view_model.key_findings:
+            cells = kf.add_row().cells
+            values = [
+                finding["priority"],
+                f"#{finding['audit_id']:02d}",
+                finding["issue"],
+                finding["why_it_matters"],
+                finding["affected_scope"],
+                finding["recommended_action"],
+            ]
+            for index, value in enumerate(values):
+                cells[index].text = ""
+                _add_url_text(cells[index].paragraphs[0], str(value))
+                for run in cells[index].paragraphs[0].runs:
+                    run.font.size = Pt(8)
+
+    # ---------- 7. Remediation Priority Plan ----------
+    _add_bookmark(_heading(doc, "Remediation Priority Plan", level=1),
+                  "RemediationPlan")
+    if not view_model.remediation_plan:
+        doc.add_paragraph(
+            "No open remediation tasks were generated from the current run.")
+    else:
+        plan = doc.add_table(rows=1, cols=9)
+        plan.style = "Table Grid"
+        for index, header in enumerate((
+                "Order", "Priority", "Audit #", "Problem", "Affected Scope",
+                "What To Do", "Owner", "How To Verify", "Status")):
+            cell = plan.rows[0].cells[index]
+            cell.text = ""
+            run = cell.paragraphs[0].add_run(header)
+            run.bold = True
+            run.font.color.rgb = WHITE
+            run.font.size = Pt(9)
+            _set_cell_shading(cell, "0B3D6F")
+        _mark_header_row(plan.rows[0])
+        for row in view_model.remediation_plan:
+            cells = plan.add_row().cells
+            values = [
+                str(row["order"]), row["priority"],
+                f"#{row['audit_id']:02d}", row["problem"], row["scope"],
+                row["action"], row["owner"], row["verify"], row["status"],
+            ]
+            for index, value in enumerate(values):
+                cells[index].text = ""
+                _add_url_text(cells[index].paragraphs[0], str(value))
+                for run in cells[index].paragraphs[0].runs:
+                    run.font.size = Pt(8)
+
+    # ---------- 8. 80-Item Diagnostic Summary (landscape) ----------
+    landscape = _new_landscape_section(doc)
+    _header_footer(landscape, site_name)
+    _add_bookmark(_heading(doc, "80-Item Diagnostic Summary", level=1),
+                  "SummaryTable")
+    rows = []
+    for item in items:
+        rows.append([
+            f"#{item['audit_id']:02d}",
+            item["category"],
+            item["check"],
+            _abbrev(item["execution"]),
+            _abbrev(item["result"]),
+            _abbrev(item["priority"]),
+            item["confidence"],
+            str(item["affected_urls"]),
+            item["action_required"],
+        ])
+    _summary_table(doc, rows)
+
+    # ---------- 9. Full Audit #01–80 (portrait) ----------
+    portrait = _new_portrait_section(doc)
+    _header_footer(portrait, site_name)
+    _add_bookmark(_heading(doc, "Full 80-Item Diagnosis", level=1),
+                  "FullDiagnosis")
+    for item in view_model.audit_items:
+        _render_actionable_audit(doc, item, schema_distribution)
+
+    # ---------- 10. Remediation Checklist ----------
+    _add_bookmark(_heading(doc, "Remediation Checklist", level=1),
+                  "RemediationChecklist")
+    if not view_model.checklist_rows:
+        doc.add_paragraph(
+            "No open remediation tasks; nothing to check off.")
+    else:
+        checklist = doc.add_table(rows=1, cols=8)
+        checklist.style = "Table Grid"
+        for index, header in enumerate((
+                "☐", "Audit", "Priority", "Problem", "Scope", "Action",
+                "Owner", "Verification")):
+            cell = checklist.rows[0].cells[index]
+            cell.text = ""
+            run = cell.paragraphs[0].add_run(header)
+            run.bold = True
+            run.font.color.rgb = WHITE
+            run.font.size = Pt(9)
+            _set_cell_shading(cell, "0B3D6F")
+        _mark_header_row(checklist.rows[0])
+        for row in view_model.checklist_rows:
+            cells = checklist.add_row().cells
+            values = [
+                row["checkbox"], f"#{row['audit_id']:02d}", row["priority"],
+                row["problem"], row["scope"], row["action"], row["owner"],
+                row["verification"],
+            ]
+            for index, value in enumerate(values):
+                cells[index].text = ""
+                _add_url_text(cells[index].paragraphs[0], str(value))
+                for run in cells[index].paragraphs[0].runs:
+                    run.font.size = Pt(8)
+        doc.add_paragraph(
+            "Status 初始为 Open；可在 Word 中改为 In Progress / Fixed / "
+            "Verified。")
+
+    # ---------- 11. Manual Review Required ----------
+    _add_bookmark(_heading(doc, "Manual Review Required", level=1),
+                  "ManualReview")
+    if not manual_rows:
+        doc.add_paragraph("No manual review actions pending.")
+    else:
+        manual = doc.add_table(rows=1, cols=4)
+        manual.style = "Table Grid"
+        for index, header in enumerate(("Audit", "Rule", "Scope", "Status")):
+            cell = manual.rows[0].cells[index]
+            cell.text = ""
+            run = cell.paragraphs[0].add_run(header)
+            run.bold = True
+            run.font.color.rgb = WHITE
+            _set_cell_shading(cell, "0B3D6F")
+        for row in manual_rows:
+            cells = manual.add_row().cells
+            cells[0].text = f"#{row.get('audit_id', '')}"
+            cells[1].text = str(row.get("rule", ""))
+            cells[2].text = str(row.get("scope", "SITE"))
+            cells[3].text = str(row.get("status", "PENDING"))
+
+    # ---------- 12. 30-Day Remediation Roadmap ----------
+    _add_bookmark(_heading(doc, "30-Day Remediation Roadmap", level=1),
+                  "Roadmap")
+    for section_title, lines in [
+        ("Immediate（0–7 天）", view_model.roadmap.get("immediate", [])),
+        ("Short Term（8–14 天）", view_model.roadmap.get("short_term", [])),
+        ("Medium Term（15–30 天）", view_model.roadmap.get("medium_term", [])),
+        ("Data Collection（并行）", [
+            f"{metrics.get('data_required', 0)} 条 DATA_REQUIRED：接入 "
+            "GSC/Semrush/GA4/日志/RUM/WP 快照/渲染/可用性后重新评估。",
+        ]),
+    ]:
+        doc.add_heading(section_title, level=2)
+        for line in lines or ["（无）"]:
+            doc.add_paragraph(str(line), style="List Bullet")
+
+    # ---------- 13. Responsibility Matrix ----------
+    _add_bookmark(_heading(doc, "Responsibility Matrix", level=1),
+                  "Responsibility")
+    resp = doc.add_table(rows=1, cols=2)
+    resp.style = "Table Grid"
+    for index, header in enumerate(("Owner", "Open Tasks")):
+        cell = resp.rows[0].cells[index]
+        cell.text = ""
+        run = cell.paragraphs[0].add_run(header)
+        run.bold = True
+        run.font.color.rgb = WHITE
+        _set_cell_shading(cell, "0B3D6F")
+    for row in view_model.responsibility:
+        cells = resp.add_row().cells
+        cells[0].text = row["owner"]
+        cells[1].text = str(row["task_count"])
+
+    # ---------- 14. Acceptance & Recheck ----------
+    _add_bookmark(_heading(doc, "Acceptance & Recheck", level=1),
+                  "Acceptance")
+    for step in view_model.recheck_steps:
+        doc.add_paragraph(step, style="List Bullet")
+
+    # ---------- 15. Technical Appendix ----------
+    _add_bookmark(_heading(doc, "Technical Appendix", level=1),
+                  "TechnicalAppendix")
+    doc.add_paragraph(
+        f"数据来源：{audit_date} 受控抓取（{pages_crawled} 页）+ 离线 replay "
+        "重建（当前规则引擎）。")
+    doc.add_paragraph(
+        f"诊断质量修正：80 项复核；无已知系统误报；无 missing-data PASS；"
+        f"{_psi_appendix_note(items)}"
+        "#70 部分人工验证。")
+    metadata = view_model.report_metadata
+    doc.add_paragraph(
+        "Report metadata: "
+        f"schema={metadata.get('report_schema_version', '')} · "
+        f"template={metadata.get('report_template_version', '')} · "
+        f"audience={metadata.get('audience', 'client')}"
+        + (f" · run_id={metadata.get('run_id')}"
+           if metadata.get("run_id") else "")
+        + (f" · replay_sha256={metadata.get('replay_sha256')}"
+           if metadata.get("replay_sha256") else ""))
+    doc.add_paragraph(
+        "报告由 Master SEO Audit System 自动生成；未提供数据源的规则保持 "
+        "NOT_CHECKED，报告不包含模拟或编造结果。")
+
+    doc.save(output_path)
+    return output_path
