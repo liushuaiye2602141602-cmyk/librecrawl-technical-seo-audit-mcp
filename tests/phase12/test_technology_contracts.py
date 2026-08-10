@@ -70,13 +70,15 @@ def test_technology_artifact_contains_detector_and_registry_version():
     assert profile["signature_registry_version"] == "1.2.0"
 
 
-def test_conflicting_signals_reduce_or_flag_confidence():
+def test_same_type_different_values_are_not_automatic_conflict():
     from audit_rules.technology.models import aggregate_confidence
     a = _evidence(value="WordPress")
     b = _evidence(value="Webflow")
+    # Different signal values under one signal type are corroborating
+    # evidence, never a same-detection conflict. CONFLICTING status is
+    # decided by the detector from mutually-exclusive technology judgments.
     score, conflicting = aggregate_confidence([a, b])
-    assert conflicting is True
-    assert score < 0.5
+    assert conflicting is False
     score2, conflict2 = aggregate_confidence([a, a])
     assert conflict2 is False
     assert score2 >= 0.8

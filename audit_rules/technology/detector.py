@@ -23,6 +23,7 @@ from audit_rules.technology.signatures import TechnologySignatureRegistry
 
 # Technologies that cannot credibly coexist within one site.
 _MUTUALLY_EXCLUSIVE = {"CMS", "Ecommerce"}
+_CREDIBLE_CONFLICT_THRESHOLD = 0.5
 
 
 class LocalTechnologyDetector:
@@ -56,7 +57,7 @@ class LocalTechnologyDetector:
                 matched = self._match_signature(signature, pages, corpora)
                 if not matched:
                     continue
-                score, conflicting = aggregate_confidence(matched)
+                score, _ = aggregate_confidence(matched)
                 version = self._extract_version(signature, matched)
                 detection = TechnologyDetection(
                     category=signature.category,
@@ -71,11 +72,8 @@ class LocalTechnologyDetector:
                     affected_urls=list(dict.fromkeys(
                         e.source_url for e in matched)),
                 )
-                if conflicting:
-                    detection.status = DetectionStatus.CONFLICTING.value
-                    detection.confidence_score = round(min(score, 0.45), 2)
-                    detection.confidence = confidence_label(detection.confidence_score)
                 detections.append(detection)
+            self._apply_negative_signal_conflicts(detections, pages, corpora)
             self._apply_cross_category_conflicts(detections)
             not_detected = self._not_detected_technologies(detections)
             profile = build_profile(
@@ -157,16 +155,74 @@ class LocalTechnologyDetector:
                             source_url=page.url or "",
                             source_scope="single_page",
                             strength=signal.get("strength", "weak"),
+                            pattern=signal["pattern"],
                         ))
         return evidence
 
+    def _apply_negative_signal_conflicts(
+        self, detections, pages, corpora,
+    ) -> None:
+        """Consume declared negative signals.
+
+        A strong negative signal (a mutually-exclusive alternative, e.g.
+        ``meta_generator=Webflow`` against WordPress) matching anywhere in the
+        crawl conflicts with a credible positive detection. Weak negatives or
+        sub-threshold positives are recorded only as context and never
+        downgrade a strong detection.
+        """
+        signatures = {
+            signature.technology: signature
+            for signature in self._registry.iter_signatures()
+        }
+        for detection in detections:
+            if detection.status != DetectionStatus.DETECTED.value:
+                continue
+            signature = signatures.get(detection.technology_name)
+            if not signature or not signature.negative_signals:
+                continue
+            if detection.base_confidence_score < _CREDIBLE_CONFLICT_THRESHOLD:
+                continue
+            for negative in signature.negative_signals:
+                if negative.get("strength") != "strong":
+                    continue
+                signal_type = negative["type"]
+                pattern = re.compile(negative["pattern"], re.IGNORECASE)
+                match = self._find_negative_value(corpora, signal_type, pattern)
+                if match is None:
+                    continue
+                detection.status = DetectionStatus.CONFLICTING.value
+                detection.confidence_score = round(
+                    min(detection.confidence_score, 0.45), 2)
+                detection.confidence = confidence_label(
+                    detection.confidence_score)
+                detection.conflicting_signals.append(
+                    f"{signal_type}={str(match)[:80]}")
+
     @staticmethod
-    def _apply_cross_category_conflicts(detections) -> None:
-        """Technologies that cannot credibly coexist are CONFLICTING."""
+    def _find_negative_value(corpora, signal_type: str, pattern) -> str | None:
+        for corpus in corpora:
+            for value in corpus.get(signal_type, []):
+                if value and pattern.search(str(value)):
+                    return str(value)
+        return None
+
+    @classmethod
+    def _apply_cross_category_conflicts(cls, detections) -> None:
+        """Credible mutually-exclusive technologies are CONFLICTING.
+
+        Only members that reached the credible confidence threshold
+        participate: a weak competing CMS candidate must not poison a strong
+        detection. Sub-threshold members keep their status/confidence.
+        """
         for category in _MUTUALLY_EXCLUSIVE:
             members = [
                 d for d in detections
-                if d.category == category and d.status == DetectionStatus.DETECTED.value
+                if d.category == category
+                and d.status in (
+                    DetectionStatus.DETECTED.value,
+                    DetectionStatus.CONFLICTING.value,
+                )
+                and d.base_confidence_score >= _CREDIBLE_CONFLICT_THRESHOLD
             ]
             if len(members) <= 1:
                 continue

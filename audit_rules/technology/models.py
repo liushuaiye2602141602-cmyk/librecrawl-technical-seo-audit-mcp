@@ -18,8 +18,8 @@ from typing import Any, Optional
 
 
 SCHEMA_VERSION = "technology-profile-v1"
-DETECTOR_VERSION = "1.0.0"
-SIGNATURE_REGISTRY_VERSION = "1.0.0"
+DETECTOR_VERSION = "1.1.0"
+SIGNATURE_REGISTRY_VERSION = "1.1.0"
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -77,35 +77,56 @@ class TechnologyEvidence:
     source_scope: str  # single_page | multi_page | site_level
     strength: str      # strong | medium | weak
     provenance: str = "local_crawl"  # local_crawl | external_api
+    pattern: str = ""  # registry signature pattern (signal family)
 
 
 _STRENGTH_SCORE = {"strong": 0.85, "medium": 0.65, "weak": 0.45}
 
 
-def _conflicts(signals: list[TechnologyEvidence]) -> bool:
-    """True when signals of the same type carry mutually exclusive values."""
-    groups: dict[str, set[str]] = {}
-    for signal in signals:
-        groups.setdefault(signal.signal_type, set()).add(
-            signal.signal_value.strip().lower())
-    return any(len(values) > 1 for values in groups.values())
+def _evidence_family(signal: TechnologyEvidence) -> str:
+    """Identity of an independent signal family.
+
+    Registered signature patterns are the families: every URL/page matching
+    the same pattern corroborates one family. Evidence without a pattern
+    (e.g., external facts) falls back to its signal type so raw instances
+    never fake independent fingerprints.
+    """
+    return signal.pattern or signal.signal_type
 
 
 def aggregate_confidence(
     signals: list[TechnologyEvidence],
 ) -> tuple[float, bool]:
-    """Aggregate evidence into (confidence_score, is_conflicting)."""
+    """Aggregate evidence into (confidence_score, is_conflicting).
+
+    Confidence is based on independent signature families plus bounded source
+    breadth. One strong family across many pages stays High (0.80-0.82), never
+    0.92; two distinct strong families reach 0.92. Multiple URLs matching the
+    same pattern corroborate but are not independent fingerprints.
+
+    CONFLICTING is NOT derived here: it is produced only by the detector from
+    genuinely mutually-exclusive technology judgments (credible competing CMS
+    candidates, declared negative signals).
+    """
     if not signals:
         return 0.0, False
-    conflicting = _conflicts(signals)
-    if conflicting:
-        return 0.3, True
-    scores = [_STRENGTH_SCORE.get(s.strength, 0.4) for s in signals]
-    strong_count = sum(1 for s in scores if s >= 0.85)
-    if strong_count >= 2:
+    families: dict[str, list[TechnologyEvidence]] = {}
+    for signal in signals:
+        families.setdefault(_evidence_family(signal), []).append(signal)
+    strong_families = [
+        family for family, items in families.items()
+        if any(item.strength == "strong" for item in items)
+    ]
+    if len(strong_families) >= 2:
         return 0.92, False
-    if strong_count == 1:
-        return 0.8, False
+    if len(strong_families) == 1:
+        sources = {signal.source_url for signal in signals
+                   if signal.strength == "strong"}
+        # Cross-page corroboration of a single strong family adds bounded
+        # reliability but must not impersonate independent fingerprints.
+        breadth = 0.82 if len(sources) >= 3 else 0.8
+        return breadth, False
+    scores = [_STRENGTH_SCORE.get(s.strength, 0.4) for s in signals]
     return max(scores) - 0.1, False
 
 
@@ -129,6 +150,7 @@ class TechnologyDetection:
     version: str = "Unknown"
     confidence: str = "Low"
     confidence_score: float = 0.0
+    base_confidence_score: float = 0.0
     first_seen_urls: list[str] = field(default_factory=list)
     affected_urls: list[str] = field(default_factory=list)
     is_observation: bool = True
@@ -144,14 +166,13 @@ class TechnologyDetection:
         if not self.detection_sources:
             raise ValueError("technology detection requires evidence")
         if not self.confidence_score:
-            score, conflicting = aggregate_confidence(self.detection_sources)
-            self.confidence_score = round(score, 2)
+            score, _ = aggregate_confidence(self.detection_sources)
+            self.base_confidence_score = round(score, 2)
+            self.confidence_score = self.base_confidence_score
             self.confidence = confidence_label(self.confidence_score)
-            if conflicting:
-                self.status = DetectionStatus.CONFLICTING.value
-                self.conflicting_signals = [
-                    f"{s.signal_type}={s.signal_value}" for s in self.detection_sources
-                ]
+        else:
+            self.base_confidence_score = (
+                self.base_confidence_score or self.confidence_score)
 
 
 @dataclass

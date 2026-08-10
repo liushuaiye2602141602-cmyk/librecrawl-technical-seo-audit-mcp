@@ -397,28 +397,62 @@ def _client_safe_evidence_value(value: str) -> bool:
 
 
 def _client_evidence_lines(detection: dict) -> list[str]:
-    """Human-readable evidence: label + value + page, never raw structures."""
-    lines: list[str] = []
+    """Compact client evidence grouped by signal family.
+
+    At most three representative families with deduplicated source breadth;
+    the full structured evidence remains in 09_Technology_Profile.json.
+    """
     sources = detection.get("detection_sources") or []
-    for item in sources[:3]:
+    families: dict[str, list[dict]] = {}
+    for item in sources:
         if is_dataclass(item):
             item = asdict(item)
         if not isinstance(item, dict):
             continue
-        signal_type = str(item.get("signal_type") or "evidence")
         signal_value = str(item.get("signal_value") or "").strip()
         if not signal_value or not _client_safe_evidence_value(signal_value):
             continue
+        family = str(
+            item.get("pattern") or item.get("signal_type") or "evidence")
+        families.setdefault(family, []).append(item)
+    lines: list[str] = []
+    for items in families.values():
+        if len(lines) >= 3:
+            break
+        signal_type = str(items[0].get("signal_type") or "evidence")
         label = _EVIDENCE_LABELS.get(signal_type, signal_type)
-        page = str(item.get("source_url") or "").strip()
-        line = f"{label}: {signal_value}"
-        if page:
-            line += f" ({page})"
-        lines.append(line)
-    if len(sources) > 3:
-        lines.append(f"+{len(sources) - 3} more evidence signals "
-                     "(full list in 09_Technology_Profile.json)")
+        urls = {
+            str(item.get("source_url") or "")
+            for item in items if item.get("source_url")
+        }
+        breadth = f" across {len(urls)} pages" if len(urls) > 1 else ""
+        sample = str(items[0].get("signal_value") or "").strip()
+        if signal_type == "robots_meta":
+            lines.append(f"{label} observed{breadth} "
+                         "(SEO-plugin style output)")
+        elif signal_type == "asset_path":
+            lines.append(f"{label} observed{breadth}: {sample[:80]}")
+        else:
+            lines.append(f"{label} observed{breadth}: {sample[:60]}")
+    shown = sum(len(items) for items in
+                list(families.values())[:len(lines)]) if families else 0
+    if shown < len(sources):
+        lines.append(f"+{len(sources) - shown} additional evidence signals; "
+                     "see 09_Technology_Profile.json")
     return lines
+
+
+def _technology_status_text(status: str) -> str:
+    """Client-safe status wording for the Technology Profile table."""
+    if status == "CONFLICTING":
+        return ("CONFLICTING — Technology use is not confirmed; credible "
+                "mutually-exclusive signals were observed.")
+    if status == "NOT_DETECTED":
+        return ("NOT_DETECTED — not observed from available evidence; "
+                "absence is not proven.")
+    if status == "UNKNOWN":
+        return "UNKNOWN — cannot be reliably determined."
+    return "DETECTED — sufficient observable evidence."
 
 
 def website_technology_profile(
@@ -442,10 +476,11 @@ def website_technology_profile(
             "No technologies were confirmed from the available observable "
             "evidence. This does not prove a technology is absent.")
     else:
-        tech_table = doc.add_table(rows=1, cols=5)
+        tech_table = doc.add_table(rows=1, cols=6)
         tech_table.style = "Table Grid"
         for index, header in enumerate((
-                "Category", "Technology", "Version", "Confidence", "Evidence")):
+                "Category", "Technology", "Status", "Version", "Confidence",
+                "Evidence")):
             cell = tech_table.rows[0].cells[index]
             cell.text = ""
             run = cell.paragraphs[0].add_run(header)
@@ -459,6 +494,7 @@ def website_technology_profile(
             values = [
                 detection.get("category", ""),
                 detection.get("technology_name", ""),
+                _technology_status_text(detection.get("status", "UNKNOWN")),
                 detection.get("version", "Unknown"),
                 detection.get("confidence", "Low"),
                 " / ".join(_client_evidence_lines(detection)),
@@ -468,6 +504,13 @@ def website_technology_profile(
                 _add_url_text(cells[index].paragraphs[0], str(value))
                 for run in cells[index].paragraphs[0].runs:
                     run.font.size = Pt(9)
+        legend = doc.add_paragraph()
+        legend.add_run(
+            "Status semantics: DETECTED = sufficient observable evidence; "
+            "CONFLICTING = Technology use is not confirmed; credible "
+            "mutually-exclusive signals were observed; NOT_DETECTED = not "
+            "observed, absence is not proven; UNKNOWN = cannot be reliably "
+            "determined. Low confidence never confirms a technology.")
         status = profile.get("detection_status") or "COMPLETE"
         if status != "COMPLETE":
             p = doc.add_paragraph()
@@ -518,6 +561,30 @@ def website_technology_profile(
                 _add_url_text(cells[index].paragraphs[0], str(value))
                 for run in cells[index].paragraphs[0].runs:
                     run.font.size = Pt(9)
+
+
+_PSI_RULES = frozenset({19, 21, 22, 24, 61, 62, 63})
+
+
+def _psi_appendix_note(items: list[dict]) -> str:
+    """Derive the PSI statement from actual rule execution (source of truth).
+
+    Partial execution means the provider really produced sampled lab data;
+    NOT_CHECKED means provider data was absent and no PSI claim is made.
+    """
+    psi_items = [item for item in items if item["audit_id"] in _PSI_RULES]
+    partial = [item for item in psi_items
+               if item.get("execution") == "EXECUTED_PARTIAL"]
+    not_checked = [item for item in psi_items
+                   if item.get("execution") == "NOT_CHECKED"]
+    if partial:
+        return ("PSI sampled lab data recorded as partial execution "
+                "(field/CrUX data unavailable); no real-user CWV PASS is "
+                "claimed. ")
+    if not_checked:
+        return ("PageSpeed/PSI provider data unavailable; performance rules "
+                "remain NOT_CHECKED and no PSI success is claimed. ")
+    return ""
 
 
 def _static_toc(doc, entries: list[tuple[str, str]]) -> None:
@@ -877,7 +944,7 @@ def build_docx(
         "+ 离线 replay 重建（当前规则引擎）。")
     doc.add_paragraph(
         "诊断质量修正：80 项复核，20 项语义/状态修正；无已知系统误报；无 missing-data PASS；"
-        "PSI 采样记为部分执行；#20 TTFB 无 lab-proxy 整改任务；#11/#45 整改去重；"
+        f"{_psi_appendix_note(items)}#20 TTFB 无 lab-proxy 整改任务；#11/#45 整改去重；"
         "#70 部分人工验证。")
     doc.add_paragraph(
         "replay/snapshot/manifest 与内部校验见 Technical_Appendix 目录。")

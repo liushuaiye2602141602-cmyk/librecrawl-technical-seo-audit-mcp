@@ -28,10 +28,12 @@ def cms_applicability_decision(
     if confidence == "High":
         return "wordpress_remote"
     if confidence == "Medium" and signature_requirement == "STRONG_2":
-        strong_count = sum(
-            1 for source in wordpress.get("detection_sources", [])
+        families = {
+            source.get("pattern") or source.get("signal_type")
+            for source in wordpress.get("detection_sources", [])
             if source.get("strength") == "strong"
-        )
+        }
+        strong_count = len(families)
         if strong_count >= 2:
             return "wordpress_remote"
     return "generic"

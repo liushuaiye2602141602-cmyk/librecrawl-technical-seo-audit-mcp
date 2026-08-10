@@ -71,8 +71,6 @@ SIGNATURES = {
              "strength": "strong"},
             {"type": "response_header", "pattern": r"^webflow",
              "strength": "medium"},
-            {"type": "script_src", "pattern": r"/assets/.*\.js",
-             "strength": "weak"},
         ],
     },
     "Avada": {

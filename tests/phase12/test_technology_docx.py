@@ -160,8 +160,31 @@ def test_technology_docx_evidence_is_human_readable(tmp_path):
     from docx import Document
     doc = Document(str(_build(tmp_path, profile=_profile())))
     text = _all_text(doc)
-    assert "Meta generator: WordPress" in text
-    assert "Response header: server=nginx" in text
+    assert "Meta generator observed: WordPress" in text
+    assert "Response header observed: server=nginx" in text
+
+
+def test_technology_profile_has_status_column(tmp_path):
+    from docx import Document
+    doc = Document(str(_build(tmp_path, profile=_profile())))
+    tech = next(t for t in doc.tables
+                if [c.text for c in t.rows[0].cells][:2] ==
+                ["Category", "Technology"])
+    headers = [c.text for c in tech.rows[0].cells]
+    assert headers == ["Category", "Technology", "Status", "Version",
+                       "Confidence", "Evidence"]
+
+
+def test_conflicting_status_wording_is_client_readable(tmp_path):
+    from docx import Document
+    profile = _profile()
+    profile["detections"][1]["status"] = "CONFLICTING"
+    doc = Document(str(_build(tmp_path, profile=profile)))
+    text = _all_text(doc)
+    assert (
+        "Technology use is not confirmed; credible mutually-exclusive "
+        "signals were observed." in text
+    )
 
 
 def test_technology_docx_contains_no_sensitive_header_values(tmp_path):

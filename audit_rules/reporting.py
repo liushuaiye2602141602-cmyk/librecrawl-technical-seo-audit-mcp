@@ -186,6 +186,43 @@ def report_host(base_url: str) -> str:
     return urlsplit(base_url).hostname or base_url or "unknown-site"
 
 
+def report_run_metrics(replay: dict, pages: list[dict]) -> dict:
+    """Derive client report counts from the current run's authoritative
+    artifacts (replay + crawl pages).
+
+    Every count comes from this run: pages evaluated, sitemap URLs parsed and
+    matched, and the sitemap lastmod scan size. Previous-site counts are never
+    reused.
+    """
+    counts = replay.get("counts") or {}
+    pages_crawled = int(counts.get("page_count") or len(pages) or 0)
+    sitemap = replay.get("sitemap_reconciliation") or {}
+    sitemap_total = int(sitemap.get("sitemap_total") or 0)
+    sitemap_matched = int(sitemap.get("both_count") or 0)
+    fetch_errors = sitemap.get("sitemap_fetch_errors") or []
+    invalid_status = len(fetch_errors)
+    return {
+        "pages_crawled": pages_crawled,
+        "sitemap_urls_parsed": sitemap_total,
+        "sitemap_urls_matched": sitemap_matched,
+        "sitemap_invalid_status": invalid_status,
+        "sitemap_lastmod_scanned": sitemap_total,
+    }
+
+
+def remote_observation_counts(pages: list[dict]) -> dict:
+    """URL-structure families observed in the current crawl pages."""
+    html = sum(
+        1 for page in pages
+        if str(page.get("url") or "").rstrip("/").endswith(".html")
+    )
+    return {
+        "html_suffix": html,
+        "extensionless": len(pages) - html,
+        "total": len(pages),
+    }
+
+
 def build_master_report(base_url: str, findings: list[Finding],
                         coverage_rows: list[CoverageRow]) -> str:
     """Build a deterministic report that keeps quality, coverage, and confidence separate."""
