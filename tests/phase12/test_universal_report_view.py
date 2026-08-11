@@ -40,6 +40,10 @@ def _item(audit_id, result="PASS", execution="EXECUTED_FULL", affected=0,
 
 def _items(count=80):
     items = [_item(i + 1) for i in range(count)]
+    # #02 upstream contract: crawl layer verified, GSC/Bing external
+    # validation unavailable -> EXECUTED_PARTIAL / PASS (set upstream, not by
+    # the report view).
+    items[1]["execution"] = "EXECUTED_PARTIAL"
     items[5]["result"] = "FAIL"
     items[5]["priority"] = "Critical"
     items[5]["affected_urls"] = 12
@@ -121,7 +125,8 @@ def test_management_summary_has_all_buckets():
     summary = "\n".join(view.management_summary)
     for bucket in ("SEO 健康评分", "检测覆盖率", "结论置信度", "抓取页面数",
                    "失败审计", "警告审计", "机会审计", "未验证/人工",
-                   "整改任务", "优化任务", "数据缺口任务", "人工评审任务"):
+                   "整改动作", "缓解/评审动作", "优化动作", "数据获取动作",
+                   "人工评审动作"):
         assert bucket in summary
 
 

@@ -42,6 +42,7 @@ def _item(audit_id, result="PASS", execution="EXECUTED_FULL", affected=0,
 
 def _items_with(pattern: str) -> list[dict]:
     items = [_item(i + 1) for i in range(80)]
+    items[1]["execution"] = "EXECUTED_PARTIAL"
     if pattern == "generic_wordpress_site":
         pass
     elif pattern == "generic_nonwordpress_site":

@@ -214,6 +214,8 @@ FINAL_ACCEPTANCE_OVERRIDES: dict[int, str] = {
 
 
 FINAL_WHAT_CHECKED_OVERRIDES: dict[int, str] = {
+    1: ("检查 /robots.txt 是否存在并可访问；是否错误阻挡重要页面；robots 规则"
+        "是否符合预期抓取策略；如存在 Sitemap 声明，则验证其地址有效。"),
     2: ("Automated/Crawl Layer: sitemap URLs are valid/indexable/canonical. "
         "External Layer: GSC/Bing submission/processing requires external "
         "evidence and was not checked."),
@@ -416,16 +418,17 @@ def build_report_view(
     task_counts = _task_counts(task_rows)
     key_findings = _build_key_findings(audit_items)
     action_views = _build_action_views(audit_items)
+    action_counts = _action_counts(action_views)
     remediation_plan = _build_remediation_plan(action_views)
     checklist_rows = _build_checklist(action_views)
     management_summary = _build_management_summary(
         score, coverage_pct, confidence_label, confidence_pct,
         pages_crawled, result_distribution, execution_distribution,
-        task_counts, audit_items)
+        action_counts, audit_items)
     score_explanation, explanations = _build_score_explanation(
         score, coverage_pct, confidence_label, confidence_pct)
     recheck_steps = _build_recheck_steps()
-    responsibility = _build_responsibility(task_rows)
+    responsibility = _build_responsibility(action_views)
     roadmap = _build_roadmap(action_views)
     technology_observations = _technology_observations(technology_profile)
     client_manual_rows = [
@@ -481,11 +484,6 @@ def _actionable_audit(item: dict) -> dict:
     execution = str(item.get("execution") or "NOT_CHECKED")
     rule_priority = str(item.get("priority") or "")
     audit_id = int(item.get("audit_id") or 0)
-    # Rule #02 final contract: crawl layer verified + GSC/Bing external
-    # validation unavailable -> EXECUTED_PARTIAL / PASS, never FULL.
-    if (audit_id == 2 and execution == "EXECUTED_FULL"
-            and "LibreCrawl" in str(item.get("data_source") or "")):
-        execution = "EXECUTED_PARTIAL"
     action_priority = (
         "N/A" if execution == "NOT_APPLICABLE"
         else _action_priority(result, rule_priority))
@@ -602,6 +600,16 @@ def _task_counts(task_rows: list[dict]) -> dict:
     for row in task_rows:
         task_type = str(row.get("task_type") or "MONITORING")
         counts[task_type] = counts.get(task_type, 0) + 1
+    return counts
+
+
+def _action_counts(action_views: dict[int, dict]) -> dict:
+    """Client action counts derived from normalized AuditActionViews."""
+    counts = {"REMEDIATION": 0, "MITIGATION": 0, "OPTIMIZATION": 0,
+              "DATA_REQUIRED": 0, "MANUAL_REVIEW": 0}
+    for view in action_views.values():
+        if view["action_type"] in counts:
+            counts[view["action_type"]] += 1
     return counts
 
 
@@ -749,16 +757,17 @@ def _build_checklist(action_views: dict[int, dict]) -> list[dict]:
 def _build_management_summary(
     score, coverage_pct, confidence_label, confidence_pct,
     pages_crawled, result_distribution, execution_distribution,
-    task_counts, audit_items,
+    action_counts, audit_items,
 ) -> list[str]:
     fail_audits = result_distribution.get("FAIL", 0)
     warning_audits = result_distribution.get("WARNING", 0)
     opportunity_audits = result_distribution.get("OPPORTUNITY", 0)
     unknown_audits = result_distribution.get("UNKNOWN", 0)
-    remediation_tasks = task_counts.get("REMEDIATION", 0)
-    optimization_tasks = task_counts.get("OPTIMIZATION", 0)
-    data_required_tasks = task_counts.get("DATA_REQUIRED", 0)
-    manual_tasks = task_counts.get("MANUAL_REVIEW", 0)
+    remediation_actions = action_counts.get("REMEDIATION", 0)
+    mitigation_actions = action_counts.get("MITIGATION", 0)
+    optimization_actions = action_counts.get("OPTIMIZATION", 0)
+    data_required_actions = action_counts.get("DATA_REQUIRED", 0)
+    manual_actions = action_counts.get("MANUAL_REVIEW", 0)
     total_audits = len(audit_items)
     return [
         f"SEO 健康评分: {score:.2f} / 100（仅统计已执行规则）",
@@ -768,10 +777,11 @@ def _build_management_summary(
         f"审计状态（共 {total_audits} 项）— 失败审计: {fail_audits} · "
         f"警告审计: {warning_audits} · 机会审计: {opportunity_audits} · "
         f"未验证/人工: {unknown_audits}",
-        f"整改任务（REMEDIATION tasks）: {remediation_tasks} 条",
-        f"优化任务（OPTIMIZATION tasks）: {optimization_tasks} 条",
-        f"数据缺口任务（DATA_REQUIRED tasks）: {data_required_tasks} 条",
-        f"人工评审任务（MANUAL_REVIEW tasks）: {manual_tasks} 条",
+        f"整改动作（REMEDIATION）: {remediation_actions} 条",
+        f"缓解/评审动作（MITIGATION）: {mitigation_actions} 条",
+        f"优化动作（OPTIMIZATION）: {optimization_actions} 条",
+        f"数据获取动作（DATA_REQUIRED）: {data_required_actions} 条",
+        f"人工评审动作（MANUAL_REVIEW）: {manual_actions} 条",
     ]
 
 
@@ -799,10 +809,14 @@ def _build_recheck_steps() -> list[str]:
     ]
 
 
-def _build_responsibility(task_rows: list[dict]) -> list[dict]:
+def _build_responsibility(action_views: dict[int, dict]) -> list[dict]:
     groups: dict[str, int] = {}
-    for row in task_rows:
-        owner = str(row.get("owner") or "SEO")
+    included = ("REMEDIATION", "MITIGATION", "OPTIMIZATION",
+                "DATA_REQUIRED", "MANUAL_REVIEW")
+    for view in action_views.values():
+        if view["action_type"] not in included:
+            continue
+        owner = str(view.get("owner") or "SEO")
         groups[owner] = groups.get(owner, 0) + 1
     return [
         {"owner": owner, "task_count": count}
