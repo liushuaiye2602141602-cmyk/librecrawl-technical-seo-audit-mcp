@@ -143,6 +143,9 @@ def shareable_safety_scan(text: str) -> list[str]:
     ):
         if marker in lowered:
             violations.append(f"debug/placeholder marker: {marker}")
+    for token in ("SITE", "PAGE", "TEMPLATE"):
+        if re.search(rf"(?<![\w/]){token}(?![\w/])", text):
+            violations.append(f"internal scope token: {token}")
     return sorted(set(violations))
 
 
@@ -185,9 +188,33 @@ def _action_priority(result: str, rule_priority: str) -> str:
             rule_priority, "P2")
     if result == "OPPORTUNITY":
         return "P2"
+    if result == "MANUAL_REVIEW_REQUIRED":
+        return "Manual Review"
     if result == "UNKNOWN":
         return "Data gap"
     return "None"
+
+
+def client_scope(value: str) -> str:
+    """Replace internal scope tokens with human wording."""
+    return {
+        "SITE": "Site-wide / 全站",
+        "PAGE": "Page-level / 页面级",
+        "TEMPLATE": "Template-level / 模板级",
+    }.get(str(value or "").upper(), str(value or "") or "site-wide")
+
+
+FINAL_ACCEPTANCE_OVERRIDES: dict[int, str] = {
+    1: ("/robots.txt 返回 200；重要页面未被错误 Disallow；robots 规则与预期抓取策略"
+        "一致；如包含 Sitemap 声明，则地址有效。"),
+    2: ("Automated/Crawl Acceptance: 重要 Sitemap URL 为 200 + Indexable + "
+        "Canonical。\nExternal Validation: GSC/Bing submission/processing "
+        "status requires external data and remains not checked."),
+}
+
+
+def _final_acceptance(audit_id: int, fallback: str) -> str:
+    return FINAL_ACCEPTANCE_OVERRIDES.get(int(audit_id or 0), fallback)
 
 
 def _result_diagnosis(result: str) -> str:
@@ -203,34 +230,61 @@ def _result_diagnosis(result: str) -> str:
     }.get(result, "待判定。")
 
 
-def _result_action(result: str, item_fix: str, rule_priority: str) -> str:
-    """Guarantee non-PASS results always carry an actionable remediation."""
-    fix = str(item_fix or "").strip()
+def _primary_action(execution: str, result: str, item: dict) -> str:
+    """Execution-precedence primary action.
+
+    NOT_APPLICABLE -> no action; NOT_CHECKED -> obtain the data / complete
+    the check; executed rules -> result-driven action.
+    """
+    if execution == "NOT_APPLICABLE":
+        return "No action required for the current site architecture."
+    if result == "MANUAL_REVIEW_REQUIRED":
+        manual = item.get("manual") or {}
+        review = str(manual.get("review") or item.get("limitations") or "")
+        return (f"Complete the manual review: "
+                f"{review or 'perform the named manual review.'}")
+    if execution == "NOT_CHECKED" or result == "UNKNOWN":
+        required = _required_data_for(item)
+        return f"Provide {required} and re-run the audit."
     if result == "PASS":
-        return fix or "No remediation required."
-    if result == "NOT_APPLICABLE":
-        return "No action required for current architecture."
-    lowered = fix.lower()
-    if not fix or "no remediation required" in lowered:
+        return str(item.get("fix") or "") or "No remediation required."
+    fix = str(item.get("fix") or "").strip()
+    if not fix or "no remediation required" in fix.lower():
         if result == "WARNING":
             return "评估并缓解该规则范围内的风险（按规则整改建议执行）。"
         if result == "OPPORTUNITY":
             return "按规则优化建议执行（例如补充缺失信号/结构）。"
-        if result == "UNKNOWN":
-            return "提供所需数据或完成人工检查后再评估。"
-        if result == "MANUAL_REVIEW_REQUIRED":
-            return "按 Manual Review 指引完成人工评审。"
         return "按规则整改建议执行并复测。"
     return fix
 
 
-def _result_acceptance(result: str, item_acceptance: str) -> str:
-    """Acceptance wording that matches the result semantics."""
+def _potential_remediation(execution: str, result: str, item: dict) -> str:
+    """Labeled potential remediation used only when a condition is confirmed."""
+    if execution in ("NOT_APPLICABLE",):
+        return ""
+    fix = str(item.get("fix") or "").strip()
+    if execution == "NOT_CHECKED" or result == "UNKNOWN":
+        if not fix or "no remediation" in fix.lower():
+            return ""
+        return "Potential Remediation If Confirmed: " + fix
+    if result == "MANUAL_REVIEW_REQUIRED":
+        if not fix or "no remediation" in fix.lower():
+            return ""
+        return "Potential Remediation If Confirmed: " + fix
+    return ""
+
+
+def _acceptance(execution: str, result: str, audit_id: int,
+                item_acceptance: str) -> str:
+    """Acceptance wording that matches execution+result semantics."""
+    if execution == "NOT_APPLICABLE":
+        return ("Not applicable — no remediation/recheck required unless "
+                "site architecture changes.")
     acceptance = str(item_acceptance or "").strip()
+    if audit_id in FINAL_ACCEPTANCE_OVERRIDES:
+        acceptance = _final_acceptance(audit_id, acceptance)
     if result == "PASS":
         return acceptance or "当前状态满足该规则要求。"
-    if result == "NOT_APPLICABLE":
-        return "不适用：无需验收。"
     if result == "UNKNOWN":
         return "Not yet verified（需先提供所需数据/完成人工检查）。"
     if result == "MANUAL_REVIEW_REQUIRED":
@@ -364,8 +418,12 @@ def build_report_view(
         score, coverage_pct, confidence_label, confidence_pct)
     recheck_steps = _build_recheck_steps()
     responsibility = _build_responsibility(task_rows)
-    roadmap = _build_roadmap(task_rows)
+    roadmap = _build_roadmap(task_rows, audit_items)
     technology_observations = _technology_observations(technology_profile)
+    client_manual_rows = [
+        dict(row, scope=client_scope(row.get("scope")))
+        for row in (manual_rows or [])
+    ]
 
     metadata = {
         "report_schema_version": REPORT_SCHEMA_VERSION,
@@ -397,7 +455,7 @@ def build_report_view(
         key_findings=key_findings,
         remediation_plan=remediation_plan,
         checklist_rows=checklist_rows,
-        manual_review_rows=list(manual_rows),
+        manual_review_rows=client_manual_rows,
         roadmap=roadmap,
         responsibility=responsibility,
         recheck_steps=recheck_steps,
@@ -414,43 +472,72 @@ def _actionable_audit(item: dict) -> dict:
     result = str(item.get("result") or "UNKNOWN")
     execution = str(item.get("execution") or "NOT_CHECKED")
     rule_priority = str(item.get("priority") or "")
-    if execution == "NOT_APPLICABLE":
-        action_priority = "N/A"
-    else:
-        action_priority = _action_priority(result, rule_priority)
+    audit_id = int(item.get("audit_id") or 0)
+    action_priority = (
+        "N/A" if execution == "NOT_APPLICABLE"
+        else _action_priority(result, rule_priority))
     enriched = dict(item)
     enriched["action_priority"] = action_priority
-    enriched["scope"] = _scope_summary(item)
+    enriched["summary_action"] = _summary_action(execution, result)
+    enriched["scope"] = client_scope(_scope_summary(item))
     enriched["representative"] = (item.get("representative") or [])[:5]
     enriched["why_it_matters"] = str(
         item.get("seo_impact") or item.get("why_it_matters") or "")
-    enriched["what_to_do"] = _result_action(
-        result, str(item.get("fix") or ""), rule_priority)
-    enriched["how_to_verify"] = _result_acceptance(
-        result, str(item.get("acceptance") or ""))
+    enriched["what_to_do"] = _primary_action(execution, result, item)
+    potential = _potential_remediation(execution, result, item)
+    if potential:
+        enriched["what_to_do"] += "\n" + potential
+    enriched["how_to_verify"] = _acceptance(
+        execution, result, audit_id, str(item.get("acceptance") or ""))
     enriched["evidence"] = compact_evidence(item.get("evidence") or "")
     diagnosis = str(item.get("diagnosis") or "").strip()
-    if result in ("FAIL", "WARNING", "OPPORTUNITY") and (
-            not diagnosis or diagnosis == "Normal"):
-        enriched["diagnosis"] = _result_diagnosis(result)
-    elif not diagnosis:
-        enriched["diagnosis"] = _result_diagnosis(result)
-    if execution == "NOT_CHECKED" or result == "UNKNOWN":
-        enriched["required_data"] = _required_data_for(item)
-        enriched["how_to_complete"] = _how_to_complete(item)
-        enriched["not_verified"] = True
-        enriched["current_state"] = "Not verified"
     if execution == "NOT_APPLICABLE":
+        enriched["diagnosis"] = "不适用。"
+        enriched["actual_state"] = "Not applicable"
         enriched["why_not_applicable"] = _why_not_applicable(item)
         enriched["current_state"] = "Not applicable"
         enriched.pop("required_data", None)
         enriched.pop("how_to_complete", None)
         enriched.pop("not_verified", None)
+    elif result == "MANUAL_REVIEW_REQUIRED":
+        enriched["not_verified"] = True
+        enriched["current_state"] = "Pending manual review"
+        if not diagnosis:
+            enriched["diagnosis"] = "需要人工评审。"
+    elif execution == "NOT_CHECKED" or result == "UNKNOWN":
+        enriched["required_data"] = _required_data_for(item)
+        enriched["how_to_complete"] = _how_to_complete(item)
+        enriched["not_verified"] = True
+        enriched["current_state"] = "Not verified"
+        if not diagnosis:
+            enriched["diagnosis"] = "数据不足，无法判定。"
+    elif result in ("FAIL", "WARNING", "OPPORTUNITY") and (
+            not diagnosis or diagnosis == "Normal"):
+        enriched["diagnosis"] = _result_diagnosis(result)
+    elif not diagnosis:
+        enriched["diagnosis"] = _result_diagnosis(result)
     if result == "PASS":
         enriched["why_pass"] = (
             "The checked scope showed no actionable defect in this rule's "
             "evidence; maintain the current implementation.")
     return enriched
+
+
+def _summary_action(execution: str, result: str) -> str:
+    """Execution-precedence summary action label."""
+    if execution == "NOT_APPLICABLE":
+        return "None / N/A"
+    if execution == "NOT_CHECKED":
+        return "Data Required / Manual completion"
+    if result == "FAIL":
+        return "Fix"
+    if result == "WARNING":
+        return "Mitigate / Review"
+    if result == "OPPORTUNITY":
+        return "Optimize"
+    if result == "MANUAL_REVIEW_REQUIRED":
+        return "Manual Review"
+    return "None"
 
 
 def _distribution(audit_items: list[dict], key: str) -> dict:
@@ -555,10 +642,15 @@ def _task_result_for(row: dict) -> str:
 def _build_checklist(task_rows: list[dict]) -> list[dict]:
     rows = []
     for row in task_rows:
+        audit_id = int(row.get("audit_id") or 0)
+        action_priority = _action_priority(
+            _task_result_for(row), str(row.get("priority") or ""))
+        rule_priority = str(row.get("priority") or "")
         rows.append({
             "checkbox": "☐",
-            "audit_id": row.get("audit_id", ""),
-            "priority": row.get("priority", ""),
+            "audit_id": audit_id,
+            "action_priority": action_priority,
+            "rule_priority": rule_priority,
             "problem": str(row.get("finding") or ""),
             "scope": str(row.get("affected_url_count") or row.get("url") or ""),
             "action": str(row.get("remediation") or ""),
@@ -633,25 +725,71 @@ def _build_responsibility(task_rows: list[dict]) -> list[dict]:
     ]
 
 
-def _build_roadmap(task_rows: list[dict]) -> dict:
+def _build_roadmap(task_rows: list[dict], audit_items: list[dict]) -> dict:
+    titles = {
+        int(item.get("audit_id") or 0): str(item.get("check") or "")
+        for item in audit_items
+    }
+
+    def entry(row: dict) -> str:
+        audit_id = int(row.get("audit_id") or 0)
+        title = titles.get(audit_id, "")
+        problem = str(row.get("finding") or "")
+        action = str(row.get("remediation") or "")
+        label = f"{title}" if title else f"Audit #{audit_id}"
+        return f"#{audit_id} — {label}: {problem} {action}".strip()
+
     immediate = [
-        row for row in task_rows
+        entry(row) for row in task_rows
         if str(row.get("priority")) == "Critical"
         and str(row.get("task_type")) == "REMEDIATION"
     ]
     short_term = [
-        row for row in task_rows
+        entry(row) for row in task_rows
         if str(row.get("priority")) == "High"
         or (str(row.get("priority")) == "Critical"
             and str(row.get("task_type")) != "REMEDIATION")
     ]
-    medium_term = [row for row in task_rows if row not in immediate
-                   and row not in short_term]
+    medium_term = [
+        entry(row) for row in task_rows
+        if not (str(row.get("priority")) == "Critical"
+                and str(row.get("task_type")) == "REMEDIATION")
+        and not (str(row.get("priority")) == "High"
+                 or (str(row.get("priority")) == "Critical"
+                     and str(row.get("task_type")) != "REMEDIATION"))
+    ]
+    data_collection = [
+        (f"#{item['audit_id']} — {item['check']}: "
+         f"Collect {item.get('required_data', 'required data')}.")
+        for item in audit_items
+        if item.get("execution") == "NOT_CHECKED"
+        and item.get("result") == "UNKNOWN"
+    ]
     return {
-        "immediate": [str(row.get("finding") or "") for row in immediate],
-        "short_term": [str(row.get("finding") or "") for row in short_term],
-        "medium_term": [str(row.get("finding") or "") for row in medium_term],
+        "immediate": immediate,
+        "short_term": short_term,
+        "medium_term": medium_term,
+        "data_collection": data_collection,
     }
+
+
+def _technology_evidence(detection: dict) -> list[str]:
+    sources = detection.get("detection_sources") or []
+    lines = []
+    for source in sources[:2]:
+        if isinstance(source, dict):
+            signal_type = str(source.get("signal_type") or "signal")
+            signal_value = str(source.get("signal_value") or "").strip()
+            if signal_value:
+                lines.append(f"{signal_type}: {signal_value[:80]}")
+    if lines:
+        return lines
+    status = str(detection.get("status") or "UNKNOWN")
+    if status == "DETECTED":
+        return ["Vendor-specific signature observed "
+                "(details in 09_Technology_Profile.json)"]
+    return ["Observable signals present but not vendor-confirmed "
+            "(details in 09_Technology_Profile.json)"]
 
 
 def _technology_observations(profile: dict | None) -> list[dict]:
@@ -672,5 +810,6 @@ def _technology_observations(profile: dict | None) -> list[dict]:
             "confidence": confidence,
             "version": detection.get("version", "Unknown"),
             "presentation": presentation,
+            "evidence": _technology_evidence(detection),
         })
     return observations

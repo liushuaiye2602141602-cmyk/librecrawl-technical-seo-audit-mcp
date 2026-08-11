@@ -439,6 +439,14 @@ def _client_evidence_lines(detection: dict) -> list[str]:
     if shown < len(sources):
         lines.append(f"+{len(sources) - shown} additional evidence signals; "
                      "see 09_Technology_Profile.json")
+    if not lines:
+        status = str(detection.get("status") or "UNKNOWN")
+        if status == "DETECTED":
+            lines.append("Vendor-specific signature observed "
+                         "(details in 09_Technology_Profile.json)")
+        else:
+            lines.append("Observable signals present but not vendor-confirmed "
+                         "(details in 09_Technology_Profile.json)")
     return lines
 
 
@@ -1281,11 +1289,11 @@ def build_universal_docx(
         doc.add_paragraph(
             "No open remediation tasks; nothing to check off.")
     else:
-        checklist = doc.add_table(rows=1, cols=8)
+        checklist = doc.add_table(rows=1, cols=9)
         checklist.style = "Table Grid"
         for index, header in enumerate((
-                "☐", "Audit", "Priority", "Problem", "Scope", "Action",
-                "Owner", "Verification")):
+                "☐", "Audit", "Action Priority", "Rule Priority", "Problem",
+                "Scope", "Action", "Owner", "Verification")):
             cell = checklist.rows[0].cells[index]
             cell.text = ""
             run = cell.paragraphs[0].add_run(header)
@@ -1297,7 +1305,8 @@ def build_universal_docx(
         for row in view_model.checklist_rows:
             cells = checklist.add_row().cells
             values = [
-                row["checkbox"], f"#{row['audit_id']:02d}", row["priority"],
+                row["checkbox"], f"#{row['audit_id']:02d}",
+                row["action_priority"], row["rule_priority"],
                 row["problem"], row["scope"], row["action"], row["owner"],
                 row["verification"],
             ]
@@ -1313,7 +1322,10 @@ def build_universal_docx(
     # ---------- 11. Manual Review Required ----------
     _add_bookmark(_heading(doc, "Manual Review Required", level=1),
                   "ManualReview")
-    if not manual_rows:
+    render_manual_rows = view_model.manual_review_rows or [
+        dict(row, scope="Site-wide / 全站") for row in (manual_rows or [])
+    ]
+    if not render_manual_rows:
         doc.add_paragraph("No manual review actions pending.")
     else:
         manual = doc.add_table(rows=1, cols=4)
@@ -1325,11 +1337,11 @@ def build_universal_docx(
             run.bold = True
             run.font.color.rgb = WHITE
             _set_cell_shading(cell, "0B3D6F")
-        for row in manual_rows:
+        for row in render_manual_rows:
             cells = manual.add_row().cells
             cells[0].text = f"#{row.get('audit_id', '')}"
             cells[1].text = str(row.get("rule", ""))
-            cells[2].text = str(row.get("scope", "SITE"))
+            cells[2].text = str(row.get("scope") or "Site-wide / 全站")
             cells[3].text = str(row.get("status", "PENDING"))
 
     # ---------- 12. 30-Day Remediation Roadmap ----------
@@ -1339,10 +1351,10 @@ def build_universal_docx(
         ("Immediate（0–7 天）", view_model.roadmap.get("immediate", [])),
         ("Short Term（8–14 天）", view_model.roadmap.get("short_term", [])),
         ("Medium Term（15–30 天）", view_model.roadmap.get("medium_term", [])),
-        ("Data Collection（并行）", [
-            f"{metrics.get('data_required', 0)} 条 DATA_REQUIRED：接入 "
-            "GSC/Semrush/GA4/日志/RUM/WP 快照/渲染/可用性后重新评估。",
-        ]),
+        ("Data Collection（并行）",
+         view_model.roadmap.get("data_collection", [])
+         or [f"{metrics.get('data_required', 0)} 条 DATA_REQUIRED：接入 "
+             "GSC/Semrush/GA4/日志/RUM/WP 快照/渲染/可用性后重新评估。"]),
     ]:
         doc.add_heading(section_title, level=2)
         for line in lines or ["（无）"]:
@@ -1382,6 +1394,12 @@ def build_universal_docx(
         f"{_psi_appendix_note(items)}"
         "#70 部分人工验证。")
     metadata = view_model.report_metadata
+    if metadata.get("run_id") == "universal-demo":
+        doc.add_paragraph(
+            "This demonstration report uses a deterministic synthetic "
+            "offline dataset to validate the universal report contract. "
+            "Real client reports never replace missing evidence with "
+            "synthetic evidence.")
     doc.add_paragraph(
         "Report metadata: "
         f"schema={metadata.get('report_schema_version', '')} · "
