@@ -268,18 +268,18 @@ def _primary_action(execution: str, result: str, item: dict) -> str:
 
 
 def _potential_remediation(execution: str, result: str, item: dict) -> str:
-    """Labeled potential remediation used only when a condition is confirmed."""
+    """Raw potential remediation text (renderer adds the human label)."""
     if execution in ("NOT_APPLICABLE",):
         return ""
     fix = str(item.get("fix") or "").strip()
     if execution == "NOT_CHECKED" or result == "UNKNOWN":
         if not fix or "no remediation" in fix.lower():
             return ""
-        return "Potential Remediation If Confirmed: " + fix
+        return fix
     if result == "MANUAL_REVIEW_REQUIRED":
         if not fix or "no remediation" in fix.lower():
             return ""
-        return "Potential Remediation If Confirmed: " + fix
+        return fix
     return ""
 
 
@@ -502,8 +502,6 @@ def _actionable_audit(item: dict) -> dict:
     potential = _potential_remediation(execution, result, item)
     enriched["potential_remediation"] = potential
     enriched["primary_action"] = enriched["what_to_do"]
-    if potential:
-        enriched["what_to_do"] += "\n" + potential
     enriched["how_to_verify"] = _acceptance(
         execution, result, audit_id, str(item.get("acceptance") or ""))
     if audit_id in FINAL_WHAT_CHECKED_OVERRIDES:
@@ -526,6 +524,9 @@ def _actionable_audit(item: dict) -> dict:
     elif result == "MANUAL_REVIEW_REQUIRED":
         enriched["not_verified"] = True
         enriched["current_state"] = "Pending manual review"
+        enriched["why_it_matters"] = (
+            "当前需要人工评审，不能预设页面存在问题。先完成指定评审；"
+            "仅在确认不匹配后执行潜在整改并复测。")
         manual = enriched.get("manual") or {}
         review = str(manual.get("review") or "")
         enriched["required_data"] = "Manual Review"
@@ -538,6 +539,9 @@ def _actionable_audit(item: dict) -> dict:
         enriched["how_to_complete"] = _how_to_complete(item)
         enriched["not_verified"] = True
         enriched["current_state"] = "Not verified"
+        enriched["why_it_matters"] = (
+            "当前尚未验证，因此不应先修改网站。先获取所需数据并重新检测；"
+            "若确认存在问题，再执行潜在整改方案并复测。")
         if not diagnosis:
             enriched["diagnosis"] = "数据不足，无法判定。"
     elif result in ("FAIL", "WARNING", "OPPORTUNITY") and (
@@ -550,6 +554,11 @@ def _actionable_audit(item: dict) -> dict:
             "The checked scope showed no actionable defect in this rule's "
             "evidence; maintain the current implementation.")
         enriched["optional_maintenance"] = str(item.get("fix") or "")
+    if audit_id == 2 and execution == "EXECUTED_PARTIAL":
+        enriched["why_it_matters"] = (
+            "抓取层检查通过；GSC/Bing 外部提交/处理状态尚未验证。"
+            "No required remediation for the verified crawl layer; external "
+            "validation remains outstanding.")
     return enriched
 
 
