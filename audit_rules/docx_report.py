@@ -1011,12 +1011,17 @@ def _render_actionable_audit(doc: Document, item: dict,
             _add_url_text(p, url)
     _label(doc, "Why This Matters:", item.get("why_it_matters", ""))
     _label(doc, "What To Do:", item.get("what_to_do") or item.get("fix", ""))
+    potential = item.get("potential_remediation") or ""
+    if potential:
+        _label(doc, "Potential Remediation If Confirmed:", potential)
     _label(doc, "Owner:", item.get("owner", ""))
     _label(doc, "How To Verify / Acceptance Criteria:",
            item.get("how_to_verify") or item.get("acceptance", ""))
-    if item.get("not_verified"):
+    if item.get("required_data") and item.get("how_to_complete"):
         _label(doc, "Not Verified — Required Data:", item.get("required_data", ""))
         _label(doc, "How To Complete:", item.get("how_to_complete", ""))
+    if item.get("result") == "PASS" and item.get("optional_maintenance"):
+        _label(doc, "Optional Maintenance:", item.get("optional_maintenance", ""))
     if item.get("why_not_applicable"):
         _label(doc, "Why Not Applicable:", item.get("why_not_applicable", ""))
     if item.get("limitations"):
@@ -1260,7 +1265,7 @@ def build_universal_docx(
     _add_bookmark(_heading(doc, "80-Item Diagnostic Summary", level=1),
                   "SummaryTable")
     rows = []
-    for item in items:
+    for item in view_model.audit_items:
         rows.append([
             f"#{item['audit_id']:02d}",
             item["category"],
@@ -1270,7 +1275,7 @@ def build_universal_docx(
             _abbrev(item["priority"]),
             item["confidence"],
             str(item["affected_urls"]),
-            item["action_required"],
+            item.get("summary_label", item.get("action_required", "None")),
         ])
     _summary_table(doc, rows)
 
@@ -1355,6 +1360,7 @@ def build_universal_docx(
          view_model.roadmap.get("data_collection", [])
          or [f"{metrics.get('data_required', 0)} 条 DATA_REQUIRED：接入 "
              "GSC/Semrush/GA4/日志/RUM/WP 快照/渲染/可用性后重新评估。"]),
+        ("Manual Review（并行）", view_model.roadmap.get("manual_review", [])),
     ]:
         doc.add_heading(section_title, level=2)
         for line in lines or ["（无）"]:

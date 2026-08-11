@@ -26,6 +26,13 @@ DEMO_SITE_NAME = "Demo Client"
 
 # Deterministic synthetic scenario per audit id.
 SCENARIOS = {
+    2: {"result": "PASS", "execution": "EXECUTED_PARTIAL", "affected": 0,
+        "state": ("Automated/Crawl Layer: sitemap URLs are valid/indexable/"
+                  "canonical. External Layer: GSC/Bing submission/processing "
+                  "requires external evidence and was not checked."),
+        "diagnosis": "抓取层检查通过；外部验证未检查。",
+        "evidence": ("Crawl-layer sitemap validation passed (LibreCrawl "
+                     "only); GSC/Bing external validation not checked.")},
     6: {"result": "FAIL", "affected": 12,
         "state": ("http 与 www 均 301 到 https 规范主机；但 non-www 主机返回 "
                   "200 未跳转，12 个 URL 受影响。"),

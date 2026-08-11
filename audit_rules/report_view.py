@@ -213,6 +213,13 @@ FINAL_ACCEPTANCE_OVERRIDES: dict[int, str] = {
 }
 
 
+FINAL_WHAT_CHECKED_OVERRIDES: dict[int, str] = {
+    2: ("Automated/Crawl Layer: sitemap URLs are valid/indexable/canonical. "
+        "External Layer: GSC/Bing submission/processing requires external "
+        "evidence and was not checked."),
+}
+
+
 def _final_acceptance(audit_id: int, fallback: str) -> str:
     return FINAL_ACCEPTANCE_OVERRIDES.get(int(audit_id or 0), fallback)
 
@@ -247,7 +254,7 @@ def _primary_action(execution: str, result: str, item: dict) -> str:
         required = _required_data_for(item)
         return f"Provide {required} and re-run the audit."
     if result == "PASS":
-        return str(item.get("fix") or "") or "No remediation required."
+        return "No remediation required."
     fix = str(item.get("fix") or "").strip()
     if not fix or "no remediation required" in fix.lower():
         if result == "WARNING":
@@ -408,8 +415,9 @@ def build_report_view(
     execution_distribution = _distribution(audit_items, "execution")
     task_counts = _task_counts(task_rows)
     key_findings = _build_key_findings(audit_items)
-    remediation_plan = _build_remediation_plan(task_rows)
-    checklist_rows = _build_checklist(task_rows)
+    action_views = _build_action_views(audit_items)
+    remediation_plan = _build_remediation_plan(action_views)
+    checklist_rows = _build_checklist(action_views)
     management_summary = _build_management_summary(
         score, coverage_pct, confidence_label, confidence_pct,
         pages_crawled, result_distribution, execution_distribution,
@@ -418,7 +426,7 @@ def build_report_view(
         score, coverage_pct, confidence_label, confidence_pct)
     recheck_steps = _build_recheck_steps()
     responsibility = _build_responsibility(task_rows)
-    roadmap = _build_roadmap(task_rows, audit_items)
+    roadmap = _build_roadmap(action_views)
     technology_observations = _technology_observations(technology_profile)
     client_manual_rows = [
         dict(row, scope=client_scope(row.get("scope")))
@@ -473,28 +481,46 @@ def _actionable_audit(item: dict) -> dict:
     execution = str(item.get("execution") or "NOT_CHECKED")
     rule_priority = str(item.get("priority") or "")
     audit_id = int(item.get("audit_id") or 0)
+    # Rule #02 final contract: crawl layer verified + GSC/Bing external
+    # validation unavailable -> EXECUTED_PARTIAL / PASS, never FULL.
+    if (audit_id == 2 and execution == "EXECUTED_FULL"
+            and "LibreCrawl" in str(item.get("data_source") or "")):
+        execution = "EXECUTED_PARTIAL"
     action_priority = (
         "N/A" if execution == "NOT_APPLICABLE"
         else _action_priority(result, rule_priority))
     enriched = dict(item)
+    enriched["execution"] = execution
+    enriched["result"] = result
     enriched["action_priority"] = action_priority
     enriched["summary_action"] = _summary_action(execution, result)
+    enriched["summary_label"] = _summary_label(execution, result)
+    enriched["action_required"] = enriched["summary_label"]
     enriched["scope"] = client_scope(_scope_summary(item))
     enriched["representative"] = (item.get("representative") or [])[:5]
     enriched["why_it_matters"] = str(
         item.get("seo_impact") or item.get("why_it_matters") or "")
     enriched["what_to_do"] = _primary_action(execution, result, item)
     potential = _potential_remediation(execution, result, item)
+    enriched["potential_remediation"] = potential
+    enriched["primary_action"] = enriched["what_to_do"]
     if potential:
         enriched["what_to_do"] += "\n" + potential
     enriched["how_to_verify"] = _acceptance(
         execution, result, audit_id, str(item.get("acceptance") or ""))
+    if audit_id in FINAL_WHAT_CHECKED_OVERRIDES:
+        enriched["what_checked"] = FINAL_WHAT_CHECKED_OVERRIDES[audit_id]
     enriched["evidence"] = compact_evidence(item.get("evidence") or "")
     diagnosis = str(item.get("diagnosis") or "").strip()
     if execution == "NOT_APPLICABLE":
         enriched["diagnosis"] = "不适用。"
         enriched["actual_state"] = "Not applicable"
         enriched["why_not_applicable"] = _why_not_applicable(item)
+        enriched["why_it_matters"] = (
+            "This rule is not applicable to the current site architecture, "
+            "so no remediation is required. Re-evaluate only if the "
+            "architecture changes.")
+        enriched["seo_impact"] = enriched["why_it_matters"]
         enriched["current_state"] = "Not applicable"
         enriched.pop("required_data", None)
         enriched.pop("how_to_complete", None)
@@ -502,6 +528,11 @@ def _actionable_audit(item: dict) -> dict:
     elif result == "MANUAL_REVIEW_REQUIRED":
         enriched["not_verified"] = True
         enriched["current_state"] = "Pending manual review"
+        manual = enriched.get("manual") or {}
+        review = str(manual.get("review") or "")
+        enriched["required_data"] = "Manual Review"
+        enriched["how_to_complete"] = (
+            review or "Complete the named manual review.")
         if not diagnosis:
             enriched["diagnosis"] = "需要人工评审。"
     elif execution == "NOT_CHECKED" or result == "UNKNOWN":
@@ -520,6 +551,7 @@ def _actionable_audit(item: dict) -> dict:
         enriched["why_pass"] = (
             "The checked scope showed no actionable defect in this rule's "
             "evidence; maintain the current implementation.")
+        enriched["optional_maintenance"] = str(item.get("fix") or "")
     return enriched
 
 
@@ -528,7 +560,7 @@ def _summary_action(execution: str, result: str) -> str:
     if execution == "NOT_APPLICABLE":
         return "None / N/A"
     if execution == "NOT_CHECKED":
-        return "Data Required / Manual completion"
+        return "Data Required"
     if result == "FAIL":
         return "Fix"
     if result == "WARNING":
@@ -537,6 +569,23 @@ def _summary_action(execution: str, result: str) -> str:
         return "Optimize"
     if result == "MANUAL_REVIEW_REQUIRED":
         return "Manual Review"
+    return "None"
+
+
+def _summary_label(execution: str, result: str) -> str:
+    """Short action label for the 80-item summary column."""
+    if execution == "NOT_APPLICABLE":
+        return "N/A"
+    if result == "MANUAL_REVIEW_REQUIRED":
+        return "Manual Review"
+    if execution == "NOT_CHECKED" or result == "UNKNOWN":
+        return "Data Required"
+    if result == "FAIL":
+        return "Fix"
+    if result == "WARNING":
+        return "Warning Action"
+    if result == "OPPORTUNITY":
+        return "Optimize"
     return "None"
 
 
@@ -587,75 +636,111 @@ def _build_key_findings(items: list[dict], limit: int = 15) -> list[dict]:
     return findings
 
 
-def _build_remediation_plan(task_rows: list[dict]) -> list[dict]:
-    action_order = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
-    rule_order = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
-    rule_priority = {
-        "Critical": "P0", "High": "P1", "Medium": "P2", "Low": "P3",
-    }
-    ordered = sorted(
-        task_rows,
-        key=lambda row: (
-            action_order.get(
-                _action_priority(
-                    _task_result_for(row),
-                    str(row.get("priority") or "")), 9),
-            rule_order.get(str(row.get("priority")), 9),
-            str(row.get("task_type") or ""),
-            int(row.get("audit_id") or 0),
+def _action_type(execution: str, result: str) -> str:
+    if execution == "NOT_APPLICABLE":
+        return "N/A"
+    if result == "MANUAL_REVIEW_REQUIRED":
+        return "MANUAL_REVIEW"
+    if execution == "NOT_CHECKED" or result == "UNKNOWN":
+        return "DATA_REQUIRED"
+    if result == "FAIL":
+        return "REMEDIATION"
+    if result == "WARNING":
+        return "MITIGATION"
+    if result == "OPPORTUNITY":
+        return "OPTIMIZATION"
+    return "NONE"
+
+
+def _verification_for(action_type: str, item: dict) -> str:
+    if action_type == "DATA_REQUIRED":
+        return "Data obtained and rule successfully re-evaluated."
+    if action_type == "MANUAL_REVIEW":
+        return ("Manual review completed per instructions; acceptance "
+                "judged on the review criteria.")
+    if action_type == "N/A":
+        return ("Not applicable — re-evaluate only if the site architecture "
+                "changes.")
+    return str(item.get("how_to_verify") or "")
+
+
+def _build_action_views(audit_items: list[dict]) -> dict[int, dict]:
+    """One normalized client action per audit; every section consumes this."""
+    views: dict[int, dict] = {}
+    for item in audit_items:
+        audit_id = int(item.get("audit_id") or 0)
+        execution = str(item.get("execution") or "NOT_CHECKED")
+        result = str(item.get("result") or "UNKNOWN")
+        action_type = _action_type(execution, result)
+        views[audit_id] = {
+            "audit_id": audit_id,
+            "execution": execution,
+            "result": result,
+            "action_type": action_type,
+            "action_priority": item.get("action_priority", ""),
+            "rule_priority": str(item.get("priority") or ""),
+            "summary_action": item.get("summary_action", ""),
+            "summary_label": item.get("summary_label", ""),
+            "primary_action": item.get(
+                "primary_action", item.get("what_to_do", "")),
+            "potential_remediation": item.get("potential_remediation", ""),
+            "verification": _verification_for(action_type, item),
+            "required_data": item.get("required_data", ""),
+            "owner": str(item.get("owner") or ""),
+            "scope": str(item.get("scope") or ""),
+            "problem": str(item.get("check") or ""),
+        }
+    return views
+
+
+def _action_views_for_plan(action_views: dict[int, dict]) -> list[dict]:
+    order = {"P0": 0, "P1": 1, "P2": 2, "P3": 3, "Data gap": 4,
+             "Manual Review": 5, "N/A": 9, "None": 9}
+    included = ("REMEDIATION", "MITIGATION", "OPTIMIZATION",
+                "DATA_REQUIRED", "MANUAL_REVIEW")
+    return sorted(
+        (view for view in action_views.values()
+         if view["action_type"] in included),
+        key=lambda view: (
+            order.get(view["action_priority"], 9),
+            view["audit_id"],
         ),
     )
+
+
+def _build_remediation_plan(action_views: dict[int, dict]) -> list[dict]:
     plan = []
-    for index, row in enumerate(ordered, start=1):
-        audit_id = int(row.get("audit_id") or 0)
+    for index, view in enumerate(_action_views_for_plan(action_views),
+                                 start=1):
         plan.append({
             "order": index,
-            "action_priority": _action_priority(
-                _task_result_for(row), str(row.get("priority") or "")),
-            "rule_priority": rule_priority.get(
-                str(row.get("priority")), str(row.get("priority") or "")),
-            "audit_id": audit_id,
-            "problem": str(row.get("finding") or ""),
-            "scope": str(row.get("affected_url_count") or row.get("url") or ""),
-            "action": str(row.get("remediation") or ""),
-            "owner": str(row.get("owner") or ""),
-            "verify": str(row.get("acceptance_criteria") or ""),
+            "action_priority": view["action_priority"],
+            "rule_priority": view["rule_priority"],
+            "audit_id": view["audit_id"],
+            "problem": view["problem"],
+            "scope": view["scope"],
+            "action": view["primary_action"],
+            "potential": view["potential_remediation"],
+            "owner": view["owner"],
+            "verify": view["verification"],
             "status": "Open",
         })
     return plan
 
 
-def _task_result_for(row: dict) -> str:
-    """Map a task to the result its audit would carry (for consistency)."""
-    task_type = str(row.get("task_type") or "")
-    if task_type == "REMEDIATION":
-        return "FAIL"
-    if task_type == "OPTIMIZATION":
-        return "OPPORTUNITY"
-    if task_type in ("DATA_REQUIRED",):
-        return "UNKNOWN"
-    if task_type in ("MANUAL_REVIEW",):
-        return "MANUAL_REVIEW_REQUIRED"
-    return "PASS"
-
-
-def _build_checklist(task_rows: list[dict]) -> list[dict]:
+def _build_checklist(action_views: dict[int, dict]) -> list[dict]:
     rows = []
-    for row in task_rows:
-        audit_id = int(row.get("audit_id") or 0)
-        action_priority = _action_priority(
-            _task_result_for(row), str(row.get("priority") or ""))
-        rule_priority = str(row.get("priority") or "")
+    for view in _action_views_for_plan(action_views):
         rows.append({
             "checkbox": "☐",
-            "audit_id": audit_id,
-            "action_priority": action_priority,
-            "rule_priority": rule_priority,
-            "problem": str(row.get("finding") or ""),
-            "scope": str(row.get("affected_url_count") or row.get("url") or ""),
-            "action": str(row.get("remediation") or ""),
-            "owner": str(row.get("owner") or ""),
-            "verification": str(row.get("acceptance_criteria") or ""),
+            "audit_id": view["audit_id"],
+            "action_priority": view["action_priority"],
+            "rule_priority": view["rule_priority"],
+            "problem": view["problem"],
+            "scope": view["scope"],
+            "action": view["primary_action"],
+            "owner": view["owner"],
+            "verification": view["verification"],
             "status": "Open",
         })
     return rows
@@ -725,51 +810,47 @@ def _build_responsibility(task_rows: list[dict]) -> list[dict]:
     ]
 
 
-def _build_roadmap(task_rows: list[dict], audit_items: list[dict]) -> dict:
-    titles = {
-        int(item.get("audit_id") or 0): str(item.get("check") or "")
-        for item in audit_items
-    }
-
-    def entry(row: dict) -> str:
-        audit_id = int(row.get("audit_id") or 0)
-        title = titles.get(audit_id, "")
-        problem = str(row.get("finding") or "")
-        action = str(row.get("remediation") or "")
-        label = f"{title}" if title else f"Audit #{audit_id}"
-        return f"#{audit_id} — {label}: {problem} {action}".strip()
+def _build_roadmap(action_views: dict[int, dict]) -> dict:
+    def entry(view: dict, verb: str) -> str:
+        return (f"#{view['audit_id']} — {view['problem']}: "
+                f"{verb} {view['primary_action']}").strip()
 
     immediate = [
-        entry(row) for row in task_rows
-        if str(row.get("priority")) == "Critical"
-        and str(row.get("task_type")) == "REMEDIATION"
+        entry(view, "")
+        for view in action_views.values()
+        if view["action_type"] == "REMEDIATION"
+        and view["rule_priority"] == "Critical"
     ]
     short_term = [
-        entry(row) for row in task_rows
-        if str(row.get("priority")) == "High"
-        or (str(row.get("priority")) == "Critical"
-            and str(row.get("task_type")) != "REMEDIATION")
+        entry(view, "")
+        for view in action_views.values()
+        if view["action_type"] == "MITIGATION"
+        or (view["action_type"] == "REMEDIATION"
+            and view["rule_priority"] != "Critical")
     ]
     medium_term = [
-        entry(row) for row in task_rows
-        if not (str(row.get("priority")) == "Critical"
-                and str(row.get("task_type")) == "REMEDIATION")
-        and not (str(row.get("priority")) == "High"
-                 or (str(row.get("priority")) == "Critical"
-                     and str(row.get("task_type")) != "REMEDIATION"))
+        entry(view, "")
+        for view in action_views.values()
+        if view["action_type"] == "OPTIMIZATION"
     ]
     data_collection = [
-        (f"#{item['audit_id']} — {item['check']}: "
-         f"Collect {item.get('required_data', 'required data')}.")
-        for item in audit_items
-        if item.get("execution") == "NOT_CHECKED"
-        and item.get("result") == "UNKNOWN"
+        (f"#{view['audit_id']} — {view['problem']}: "
+         f"Collect {view['required_data'] or 'required data'}.")
+        for view in action_views.values()
+        if view["action_type"] == "DATA_REQUIRED"
+    ]
+    manual_review = [
+        (f"#{view['audit_id']} — {view['problem']}: "
+         "Complete the manual review.")
+        for view in action_views.values()
+        if view["action_type"] == "MANUAL_REVIEW"
     ]
     return {
         "immediate": immediate,
         "short_term": short_term,
         "medium_term": medium_term,
         "data_collection": data_collection,
+        "manual_review": manual_review,
     }
 
 

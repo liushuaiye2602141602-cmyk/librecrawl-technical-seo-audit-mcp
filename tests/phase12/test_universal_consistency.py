@@ -189,7 +189,8 @@ def test_checklist_matches_remediation_plan():
 def test_action_priority_uses_p0_p3():
     view = _view()
     for row in view.remediation_plan:
-        assert row["action_priority"] in ("P0", "P1", "P2", "P3", "N/A")
+        assert row["action_priority"] in (
+            "P0", "P1", "P2", "P3", "N/A", "Data gap", "Manual Review")
 
 
 def test_validator_fails_on_contradictory_distribution():

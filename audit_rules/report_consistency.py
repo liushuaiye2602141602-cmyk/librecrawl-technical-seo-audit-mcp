@@ -68,17 +68,43 @@ def validate_report_consistency(
                 violations.append(
                     f"audit #{item.get('audit_id')} N/A contains "
                     "remediation instructions")
+            why = str(item.get("why_it_matters") or "")
+            if ("no remediation is required" not in why.lower()
+                    and ("remediation" in why.lower()
+                         or "recheck" in why.lower())):
+                violations.append(
+                    f"audit #{item.get('audit_id')} N/A Why It Matters "
+                    "asks for remediation/recheck")
+        if execution == "NOT_CHECKED" and summary_action == "Fix":
+            violations.append(
+                f"audit #{item.get('audit_id')} NOT_CHECKED summary action "
+                "is Fix")
+        if result == "MANUAL_REVIEW_REQUIRED" and summary_action == "Fix":
+            violations.append(
+                f"audit #{item.get('audit_id')} MANUAL summary action is Fix")
+        if result == "PASS" and "no remediation required" not in action.lower():
+            violations.append(
+                f"audit #{item.get('audit_id')} PASS primary action contains "
+                "required remediation")
         if execution == "NOT_CHECKED":
             if "provide" not in action.lower() and "re-run" not in action.lower():
                 if "optimize" in action.lower() or "fix" in action.lower():
                     violations.append(
                         f"audit #{item.get('audit_id')} NOT_CHECKED primary "
                         "action is a speculative fix")
+            if not item.get("required_data") or not item.get("how_to_complete"):
+                violations.append(
+                    f"audit #{item.get('audit_id')} NOT_CHECKED missing "
+                    "required data / completion guidance")
         if result == "MANUAL_REVIEW_REQUIRED":
             if "complete the manual review" not in action.lower():
                 violations.append(
                     f"audit #{item.get('audit_id')} MANUAL_REVIEW primary "
                     "action is not the review")
+            if not item.get("required_data") or not item.get("how_to_complete"):
+                violations.append(
+                    f"audit #{item.get('audit_id')} MANUAL renders empty "
+                    "required-data fields")
             if "confirm" in action.lower() and "mismatch" in action.lower():
                 pass  # conditional phrasing allowed
         if result in ("FAIL", "WARNING", "OPPORTUNITY"):
@@ -131,12 +157,60 @@ def validate_report_consistency(
         if int(item.get("audit_id") or 0) == 2:
             data_source = str(item.get("data_source") or "")
             acceptance = str(item.get("how_to_verify") or "").lower()
+            execution = str(item.get("execution") or "")
             if "librecrawl" in data_source.lower() and (
                     "gsc" in acceptance or "bing" in acceptance) and (
                     "not checked" not in acceptance
                     and "not verified" not in acceptance):
                 violations.append(
                     "crawl-only #02 claims GSC/Bing verification")
+            if "librecrawl" in data_source.lower() and (
+                    "gsc" in acceptance or "bing" in acceptance) and (
+                    execution == "EXECUTED_FULL"):
+                violations.append(
+                    "#02 external not checked but execution says FULL")
+
+    # 10. Plan/checklist/roadmap must consume normalized actions.
+    audit_by_id = {
+        int(item.get("audit_id") or 0): item for item in audit_items
+    }
+    for row in view_model.remediation_plan:
+        audit_id = int(row.get("audit_id") or 0)
+        action = str(row.get("action") or "").lower()
+        audit = audit_by_id.get(audit_id)
+        if audit and str(audit.get("execution")) == "NOT_CHECKED":
+            if "optimize" in action or "fix" in action:
+                violations.append(
+                    f"plan #{audit_id} NOT_CHECKED action is speculative "
+                    "remediation")
+        if audit and str(audit.get("result")) == "MANUAL_REVIEW_REQUIRED":
+            if "complete the manual review" not in action:
+                violations.append(
+                    f"plan #{audit_id} MANUAL action assumes remediation")
+    for row in view_model.checklist_rows:
+        audit_id = int(row.get("audit_id") or 0)
+        action = str(row.get("action") or "").lower()
+        audit = audit_by_id.get(audit_id)
+        if audit and str(audit.get("execution")) == "NOT_CHECKED":
+            if "optimize" in action or "fix" in action:
+                violations.append(
+                    f"checklist #{audit_id} NOT_CHECKED action is "
+                    "speculative remediation")
+        if audit and str(audit.get("result")) == "MANUAL_REVIEW_REQUIRED":
+            if "complete the manual review" not in action:
+                violations.append(
+                    f"checklist #{audit_id} MANUAL action assumes "
+                    "remediation")
+    confirmed_sections = (
+        view_model.roadmap.get("immediate", [])
+        + view_model.roadmap.get("short_term", [])
+        + view_model.roadmap.get("medium_term", []))
+    for entry in confirmed_sections:
+        lowered = str(entry).lower()
+        if "collect" in lowered and "data" in lowered:
+            violations.append(
+                "roadmap places unverified remediation before evidence "
+                "collection")
 
     # 4. Task -> audit result reconciliation.
     by_id = {item.get("audit_id"): item for item in audit_items}
