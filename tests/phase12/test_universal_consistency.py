@@ -237,3 +237,52 @@ def test_client_mode_fails_closed_on_inconsistency(tmp_path):
             result_counts={}, execution_counts={}, manual_rows=[],
             schema_distribution={}, domain="https://site-a.example/",
             audit_date="2026-08-11", site_name="Site A", pages_crawled=228)
+
+
+def test_aggregated_task_audit_ids_are_parsed():
+    from audit_rules.report_consistency import (
+        _task_audit_ids, validate_report_consistency,
+    )
+    assert _task_audit_ids({"audit_id": "11,45"}) == [11, 45]
+    view = _view()
+    # A combined remediation task for two FAIL audits must not crash.
+    tasks = [{
+        "task_type": "REMEDIATION", "audit_id": "6,8", "priority": "Critical",
+        "finding": "x", "remediation": "y", "owner": "Dev",
+        "acceptance_criteria": "z", "affected_url_count": 1, "status": "Open",
+    }]
+    violations = validate_report_consistency(
+        view, view.audit_items, tasks)
+    assert not any("has no audit row" in v for v in violations)
+
+
+def test_optimization_task_for_warning_audit_is_allowed():
+    from audit_rules.report_consistency import validate_report_consistency
+    view = _view()
+    # Make audit 13 a WARNING (real production taxonomy) with an OPTIMIZATION
+    # task (title-width optimization driven by a WARNING).
+    for item in view.audit_items:
+        if item["audit_id"] == 13:
+            item["result"] = "WARNING"
+            item["execution"] = "EXECUTED_PARTIAL"
+    tasks = [{
+        "task_type": "OPTIMIZATION", "audit_id": 13, "priority": "High",
+        "finding": "title width", "remediation": "rewrite titles",
+        "owner": "SEO", "acceptance_criteria": "titles unique",
+        "affected_url_count": 6, "status": "Open",
+    }]
+    violations = validate_report_consistency(
+        view, view.audit_items, tasks)
+    assert not any("OPTIMIZATION" in v for v in violations)
+
+
+def test_evidence_strips_internal_tokens_and_raw_dumps():
+    from audit_rules.report_view import compact_evidence, strip_internal_tokens
+    dirty = ("SITE\nPhase 2 check limited. | likely_form_urls="
+             "['https://site-a.example/contact']")
+    cleaned = strip_internal_tokens(dirty)
+    assert "SITE" not in cleaned
+    assert "likely_form_urls" not in cleaned
+    compacted = compact_evidence(dirty)
+    assert "SITE" not in compacted
+    assert "likely_form_urls" not in compacted

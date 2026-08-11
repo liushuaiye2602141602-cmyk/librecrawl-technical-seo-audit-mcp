@@ -104,6 +104,16 @@ _SENSITIVE_WORDS = (
     "authorization", "set-cookie", "x-api-key", "bearer ", "secret",
     "password=", "access_token=", "-----begin",
 )
+_INTERNAL_TOKEN_RE = re.compile(r"(?<![\w/])(?:SITE|PAGE|TEMPLATE)(?![\w/])")
+_RAW_FORM_URLS_RE = re.compile(r"\|?\s*likely_form_urls=\[[^\]]*\]?")
+
+
+def strip_internal_tokens(text: Any) -> str:
+    """Remove bare internal scope tokens and raw form-url dumps."""
+    cleaned = str(text or "")
+    cleaned = _INTERNAL_TOKEN_RE.sub("", cleaned)
+    cleaned = _RAW_FORM_URLS_RE.sub("", cleaned)
+    return cleaned
 
 
 def client_safe_text(value: Any) -> str:
@@ -139,7 +149,7 @@ def shareable_safety_scan(text: str) -> list[str]:
     for marker in (
         "traceback", "nonetype", "none type", "\\u", "{'", "'}", "d:\\\\",
         "c:\\\\", "internal: ", "debug", "todo", "tbd", "example.com",
-        "lorem", "placeholder text",
+        "lorem", "placeholder text", "likely_form_urls",
     ):
         if marker in lowered:
             violations.append(f"debug/placeholder marker: {marker}")
@@ -151,6 +161,7 @@ def shareable_safety_scan(text: str) -> list[str]:
 
 def compact_evidence(evidence: str, limit: int = 5) -> str:
     """Compress large evidence to count + top examples + artifact reference."""
+    evidence = strip_internal_tokens(evidence)
     lines = [line for line in str(evidence or "").splitlines() if line.strip()]
     if len(lines) <= limit:
         return str(evidence or "")

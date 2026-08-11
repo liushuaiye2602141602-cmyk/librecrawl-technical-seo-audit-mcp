@@ -14,11 +14,24 @@ from typing import Any
 
 _ALLOWED_TASK_RESULT = {
     "REMEDIATION": {"FAIL", "WARNING"},
-    "OPTIMIZATION": {"OPPORTUNITY"},
+    # Production task taxonomy also emits OPTIMIZATION tasks for WARNING
+    # audits (e.g. title-width / ALT optimization driven by a WARNING).
+    "OPTIMIZATION": {"OPPORTUNITY", "WARNING"},
     "DATA_REQUIRED": {"UNKNOWN", "NOT_CHECKED"},
     "MANUAL_REVIEW": {"MANUAL_REVIEW_REQUIRED", "UNKNOWN", "WARNING"},
     "MONITORING": {"PASS", "WARNING"},
 }
+
+
+def _task_audit_ids(row: dict) -> list[int]:
+    """Robustly parse audit ids, including aggregated rows like '11,45'."""
+    raw = str(row.get("audit_id") or "")
+    ids = []
+    for part in raw.split(","):
+        part = part.strip()
+        if part.isdigit():
+            ids.append(int(part))
+    return ids
 
 
 def validate_report_consistency(
@@ -215,18 +228,19 @@ def validate_report_consistency(
     # 4. Task -> audit result reconciliation.
     by_id = {item.get("audit_id"): item for item in audit_items}
     for row in task_rows:
-        audit_id = int(row.get("audit_id") or 0)
+        audit_ids = _task_audit_ids(row)
         task_type = str(row.get("task_type") or "MONITORING")
-        audit = by_id.get(audit_id)
         allowed = _ALLOWED_TASK_RESULT.get(task_type, set())
-        if audit is None:
-            violations.append(f"task #{audit_id} has no audit row")
-            continue
-        result = str(audit.get("result") or "UNKNOWN")
-        if result not in allowed:
-            violations.append(
-                f"task {task_type} for audit #{audit_id} ({result}) is "
-                "not an allowed combination")
+        for audit_id in audit_ids or [0]:
+            audit = by_id.get(audit_id)
+            if audit is None:
+                violations.append(f"task #{audit_id} has no audit row")
+                continue
+            result = str(audit.get("result") or "UNKNOWN")
+            if result not in allowed:
+                violations.append(
+                    f"task {task_type} for audit #{audit_id} ({result}) is "
+                    "not an allowed combination")
 
     # 5. Key Findings actions must agree with the Full Audit actions.
     finding_actions = {
