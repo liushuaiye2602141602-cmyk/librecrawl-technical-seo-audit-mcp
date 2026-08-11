@@ -444,16 +444,9 @@ def _client_evidence_lines(detection: dict) -> list[str]:
 
 def _technology_status_text(status: str) -> str:
     """Client-safe status wording for the Technology Profile table."""
-    if status == "CONFLICTING":
-        return ("CONFLICTING — Technology use is not confirmed; credible "
-                "mutually-exclusive signals were observed.")
-    if status == "NOT_DETECTED":
-        return ("NOT_DETECTED — not observed from available evidence; "
-                "absence is not proven.")
-    if status == "UNKNOWN":
-        return ("UNKNOWN — observable signals were found, but the technology "
-                "cannot be reliably confirmed.")
-    return "DETECTED — sufficient observable evidence."
+    # Compact status token in the table cell; full semantics stay in the
+    # legend below the table.
+    return status or "UNKNOWN"
 
 
 def website_technology_profile(
@@ -511,7 +504,7 @@ def website_technology_profile(
         legend.add_run(
             "Status semantics: DETECTED = sufficient observable evidence; "
             "CONFLICTING = Technology use is not confirmed; credible "
-            "mutually-exclusive signals were observed; NOT_DETECTED = not "
+            "mutually-exclusive signals were observed. NOT_DETECTED = not "
             "observed, absence is not proven; UNKNOWN = cannot be reliably "
             "determined. Low confidence never confirms a technology.")
         status = profile.get("detection_status") or "COMPLETE"
@@ -1042,6 +1035,9 @@ def build_universal_docx(
     http_ok_pages: int = 0,
 ) -> str:
     """Build the Universal Master SEO Diagnostic Report (client default)."""
+    from audit_rules.report_consistency import assert_client_consistent
+    if view_model.audience == "client":
+        assert_client_consistent(view_model, items, task_rows)
     site_name = site_name or view_model.site_name
     doc = Document()
     _configure_styles(doc)
@@ -1075,6 +1071,24 @@ def build_universal_docx(
         r.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
     _header_footer(doc.sections[0], site_name)
 
+    # ---------- Clickable TOC (after cover) ----------
+    _static_toc(doc, [
+        ("Management Summary", "ManagementSummary"),
+        ("Executive Summary", "ExecutiveSummary"),
+        ("Website Technology Profile", "TechnologyProfile"),
+        ("Technology Risks & Recommendations", "TechnologyRisks"),
+        ("Key Findings / What Needs Attention", "KeyFindings"),
+        ("Remediation Priority Plan", "RemediationPlan"),
+        ("80-Item Diagnostic Summary", "SummaryTable"),
+        ("Full 80-Item Diagnosis", "FullDiagnosis"),
+        ("Remediation Checklist", "RemediationChecklist"),
+        ("Manual Review Required", "ManualReview"),
+        ("30-Day Remediation Roadmap", "Roadmap"),
+        ("Responsibility Matrix", "Responsibility"),
+        ("Acceptance & Recheck", "Acceptance"),
+        ("Technical Appendix", "TechnicalAppendix"),
+    ])
+
     # ---------- 2. Management Summary ----------
     _add_bookmark(_heading(doc, "Management Summary", level=1),
                   "ManagementSummary")
@@ -1090,11 +1104,12 @@ def build_universal_docx(
         run.bold = True
         run.font.color.rgb = WHITE
         _set_cell_shading(cell, "0B3D6F")
-    for result in ("PASS", "FAIL", "WARNING", "OPPORTUNITY",
-                   "MANUAL_REVIEW_REQUIRED", "UNKNOWN"):
+    result_order = ("PASS", "FAIL", "WARNING", "OPPORTUNITY",
+                    "MANUAL_REVIEW_REQUIRED", "UNKNOWN")
+    for result in result_order:
         cells = res_table.add_row().cells
         cells[0].text = result
-        cells[1].text = str(result_counts.get(result, 0))
+        cells[1].text = str(view_model.result_distribution.get(result, 0))
     cells = res_table.add_row().cells
     cells[0].text = "合计"
     cells[1].text = "80"
@@ -1112,7 +1127,8 @@ def build_universal_docx(
                       "NOT_CHECKED", "NOT_APPLICABLE"):
         cells = ex_table.add_row().cells
         cells[0].text = execution
-        cells[1].text = str(execution_counts.get(execution, 0))
+        cells[1].text = str(
+            view_model.execution_distribution.get(execution, 0))
     cells = ex_table.add_row().cells
     cells[0].text = "合计"
     cells[1].text = "80"
@@ -1202,11 +1218,12 @@ def build_universal_docx(
         doc.add_paragraph(
             "No open remediation tasks were generated from the current run.")
     else:
-        plan = doc.add_table(rows=1, cols=9)
+        plan = doc.add_table(rows=1, cols=10)
         plan.style = "Table Grid"
         for index, header in enumerate((
-                "Order", "Priority", "Audit #", "Problem", "Affected Scope",
-                "What To Do", "Owner", "How To Verify", "Status")):
+                "Order", "Action Priority", "Rule Priority", "Audit #",
+                "Problem", "Affected Scope", "What To Do", "Owner",
+                "How To Verify", "Status")):
             cell = plan.rows[0].cells[index]
             cell.text = ""
             run = cell.paragraphs[0].add_run(header)
@@ -1218,7 +1235,8 @@ def build_universal_docx(
         for row in view_model.remediation_plan:
             cells = plan.add_row().cells
             values = [
-                str(row["order"]), row["priority"],
+                str(row["order"]), row["action_priority"],
+                row["rule_priority"],
                 f"#{row['audit_id']:02d}", row["problem"], row["scope"],
                 row["action"], row["owner"], row["verify"], row["status"],
             ]

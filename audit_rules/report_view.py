@@ -175,6 +175,8 @@ def _result_order(result: str) -> int:
 
 
 def _action_priority(result: str, rule_priority: str) -> str:
+    if result == "NOT_APPLICABLE":
+        return "N/A"
     if result == "FAIL":
         return {"Critical": "P0", "High": "P1", "Medium": "P2", "Low": "P3"}.get(
             rule_priority, "P2")
@@ -186,6 +188,63 @@ def _action_priority(result: str, rule_priority: str) -> str:
     if result == "UNKNOWN":
         return "Data gap"
     return "None"
+
+
+def _result_diagnosis(result: str) -> str:
+    """Result-consistent default diagnosis when the item lacks one."""
+    return {
+        "FAIL": "检测到确认问题，需要整改。",
+        "WARNING": "检测到需要关注并处理的风险/观测。",
+        "OPPORTUNITY": "检测到有证据支持的优化机会。",
+        "PASS": "检查范围内未发现该规则对应的问题，状态健康。",
+        "UNKNOWN": "当前证据不足以判定，结果未验证。",
+        "NOT_APPLICABLE": "该规则不适用于当前网站架构。",
+        "MANUAL_REVIEW_REQUIRED": "需要人工评审后才能判定。",
+    }.get(result, "待判定。")
+
+
+def _result_action(result: str, item_fix: str, rule_priority: str) -> str:
+    """Guarantee non-PASS results always carry an actionable remediation."""
+    fix = str(item_fix or "").strip()
+    if result == "PASS":
+        return fix or "No remediation required."
+    if result == "NOT_APPLICABLE":
+        return "No action required for current architecture."
+    lowered = fix.lower()
+    if not fix or "no remediation required" in lowered:
+        if result == "WARNING":
+            return "评估并缓解该规则范围内的风险（按规则整改建议执行）。"
+        if result == "OPPORTUNITY":
+            return "按规则优化建议执行（例如补充缺失信号/结构）。"
+        if result == "UNKNOWN":
+            return "提供所需数据或完成人工检查后再评估。"
+        if result == "MANUAL_REVIEW_REQUIRED":
+            return "按 Manual Review 指引完成人工评审。"
+        return "按规则整改建议执行并复测。"
+    return fix
+
+
+def _result_acceptance(result: str, item_acceptance: str) -> str:
+    """Acceptance wording that matches the result semantics."""
+    acceptance = str(item_acceptance or "").strip()
+    if result == "PASS":
+        return acceptance or "当前状态满足该规则要求。"
+    if result == "NOT_APPLICABLE":
+        return "不适用：无需验收。"
+    if result == "UNKNOWN":
+        return "Not yet verified（需先提供所需数据/完成人工检查）。"
+    if result == "MANUAL_REVIEW_REQUIRED":
+        return "待人工评审完成后按评审标准验收。"
+    # FAIL / WARNING / OPPORTUNITY: acceptance describes the TARGET state
+    # after remediation; never claim it is currently met.
+    target = acceptance
+    for claim in (" are met.", " is met.", "已满足", "达标", "已达成"):
+        target = target.replace(claim, "")
+    target = target.replace("Acceptance criteria for this rule", "验收标准")
+    target = target.strip().strip("。.")
+    if not target:
+        target = "按规则验收标准复测确认。"
+    return "修复/优化后的验收目标：" + target + "。"
 
 
 def _why_not_applicable(item: dict) -> str:
@@ -237,6 +296,9 @@ class ReportViewModel:
     audience: str
     language: str
     audit_items: list[dict] = field(default_factory=list)
+    result_distribution: dict = field(default_factory=dict)
+    execution_distribution: dict = field(default_factory=dict)
+    task_counts: dict = field(default_factory=dict)
     management_summary: list[str] = field(default_factory=list)
     key_findings: list[dict] = field(default_factory=list)
     remediation_plan: list[dict] = field(default_factory=list)
@@ -288,12 +350,16 @@ def build_report_view(
         "Medium" if confidence_pct >= 50 else "Low")
 
     audit_items = [_actionable_audit(item) for item in items]
-    key_findings = _build_key_findings(items)
+    result_distribution = _distribution(audit_items, "result")
+    execution_distribution = _distribution(audit_items, "execution")
+    task_counts = _task_counts(task_rows)
+    key_findings = _build_key_findings(audit_items)
     remediation_plan = _build_remediation_plan(task_rows)
     checklist_rows = _build_checklist(task_rows)
     management_summary = _build_management_summary(
         score, coverage_pct, confidence_label, confidence_pct,
-        pages_crawled, metrics, audit_items)
+        pages_crawled, result_distribution, execution_distribution,
+        task_counts, audit_items)
     score_explanation, explanations = _build_score_explanation(
         score, coverage_pct, confidence_label, confidence_pct)
     recheck_steps = _build_recheck_steps()
@@ -324,6 +390,9 @@ def build_report_view(
         audience=audience,
         language=language,
         audit_items=audit_items,
+        result_distribution=result_distribution,
+        execution_distribution=execution_distribution,
+        task_counts=task_counts,
         management_summary=management_summary,
         key_findings=key_findings,
         remediation_plan=remediation_plan,
@@ -344,27 +413,60 @@ def build_report_view(
 def _actionable_audit(item: dict) -> dict:
     result = str(item.get("result") or "UNKNOWN")
     execution = str(item.get("execution") or "NOT_CHECKED")
-    action_priority = _action_priority(result, str(item.get("priority") or ""))
+    rule_priority = str(item.get("priority") or "")
+    if execution == "NOT_APPLICABLE":
+        action_priority = "N/A"
+    else:
+        action_priority = _action_priority(result, rule_priority)
     enriched = dict(item)
     enriched["action_priority"] = action_priority
     enriched["scope"] = _scope_summary(item)
     enriched["representative"] = (item.get("representative") or [])[:5]
     enriched["why_it_matters"] = str(
         item.get("seo_impact") or item.get("why_it_matters") or "")
-    enriched["what_to_do"] = str(item.get("fix") or "")
-    enriched["how_to_verify"] = str(item.get("acceptance") or "")
+    enriched["what_to_do"] = _result_action(
+        result, str(item.get("fix") or ""), rule_priority)
+    enriched["how_to_verify"] = _result_acceptance(
+        result, str(item.get("acceptance") or ""))
     enriched["evidence"] = compact_evidence(item.get("evidence") or "")
+    diagnosis = str(item.get("diagnosis") or "").strip()
+    if result in ("FAIL", "WARNING", "OPPORTUNITY") and (
+            not diagnosis or diagnosis == "Normal"):
+        enriched["diagnosis"] = _result_diagnosis(result)
+    elif not diagnosis:
+        enriched["diagnosis"] = _result_diagnosis(result)
     if execution == "NOT_CHECKED" or result == "UNKNOWN":
         enriched["required_data"] = _required_data_for(item)
         enriched["how_to_complete"] = _how_to_complete(item)
         enriched["not_verified"] = True
+        enriched["current_state"] = "Not verified"
     if execution == "NOT_APPLICABLE":
         enriched["why_not_applicable"] = _why_not_applicable(item)
+        enriched["current_state"] = "Not applicable"
+        enriched.pop("required_data", None)
+        enriched.pop("how_to_complete", None)
+        enriched.pop("not_verified", None)
     if result == "PASS":
         enriched["why_pass"] = (
             "The checked scope showed no actionable defect in this rule's "
             "evidence; maintain the current implementation.")
     return enriched
+
+
+def _distribution(audit_items: list[dict], key: str) -> dict:
+    counts: dict[str, int] = {}
+    for item in audit_items:
+        value = str(item.get(key) or "UNKNOWN")
+        counts[value] = counts.get(value, 0) + 1
+    return counts
+
+
+def _task_counts(task_rows: list[dict]) -> dict:
+    counts: dict[str, int] = {}
+    for row in task_rows:
+        task_type = str(row.get("task_type") or "MONITORING")
+        counts[task_type] = counts.get(task_type, 0) + 1
+    return counts
 
 
 def _build_key_findings(items: list[dict], limit: int = 15) -> list[dict]:
@@ -393,27 +495,39 @@ def _build_key_findings(items: list[dict], limit: int = 15) -> list[dict]:
             "why_it_matters": str(
                 item.get("seo_impact") or item.get("why_it_matters") or ""),
             "affected_scope": _scope_summary(item),
-            "recommended_action": str(item.get("fix") or ""),
+            "recommended_action": str(item.get("what_to_do") or ""),
         })
     return findings
 
 
 def _build_remediation_plan(task_rows: list[dict]) -> list[dict]:
-    priority_order = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
+    action_order = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+    rule_order = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
+    rule_priority = {
+        "Critical": "P0", "High": "P1", "Medium": "P2", "Low": "P3",
+    }
     ordered = sorted(
         task_rows,
         key=lambda row: (
-            priority_order.get(str(row.get("priority")), 9),
+            action_order.get(
+                _action_priority(
+                    _task_result_for(row),
+                    str(row.get("priority") or "")), 9),
+            rule_order.get(str(row.get("priority")), 9),
             str(row.get("task_type") or ""),
             int(row.get("audit_id") or 0),
         ),
     )
     plan = []
     for index, row in enumerate(ordered, start=1):
+        audit_id = int(row.get("audit_id") or 0)
         plan.append({
             "order": index,
-            "priority": row.get("priority", ""),
-            "audit_id": row.get("audit_id", ""),
+            "action_priority": _action_priority(
+                _task_result_for(row), str(row.get("priority") or "")),
+            "rule_priority": rule_priority.get(
+                str(row.get("priority")), str(row.get("priority") or "")),
+            "audit_id": audit_id,
             "problem": str(row.get("finding") or ""),
             "scope": str(row.get("affected_url_count") or row.get("url") or ""),
             "action": str(row.get("remediation") or ""),
@@ -422,6 +536,20 @@ def _build_remediation_plan(task_rows: list[dict]) -> list[dict]:
             "status": "Open",
         })
     return plan
+
+
+def _task_result_for(row: dict) -> str:
+    """Map a task to the result its audit would carry (for consistency)."""
+    task_type = str(row.get("task_type") or "")
+    if task_type == "REMEDIATION":
+        return "FAIL"
+    if task_type == "OPTIMIZATION":
+        return "OPPORTUNITY"
+    if task_type in ("DATA_REQUIRED",):
+        return "UNKNOWN"
+    if task_type in ("MANUAL_REVIEW",):
+        return "MANUAL_REVIEW_REQUIRED"
+    return "PASS"
 
 
 def _build_checklist(task_rows: list[dict]) -> list[dict]:
@@ -443,26 +571,30 @@ def _build_checklist(task_rows: list[dict]) -> list[dict]:
 
 def _build_management_summary(
     score, coverage_pct, confidence_label, confidence_pct,
-    pages_crawled, metrics, audit_items,
+    pages_crawled, result_distribution, execution_distribution,
+    task_counts, audit_items,
 ) -> list[str]:
-    results = {}
-    for item in audit_items:
-        results[item.get("result")] = results.get(item.get("result"), 0) + 1
-    confirmed = int(metrics.get("confirmed_remediation") or 0)
-    warnings = results.get("WARNING", 0)
-    opportunities = results.get("OPPORTUNITY", 0)
-    manual = int(metrics.get("manual_review_actions") or 0)
-    data_required = int(metrics.get("data_required") or 0)
+    fail_audits = result_distribution.get("FAIL", 0)
+    warning_audits = result_distribution.get("WARNING", 0)
+    opportunity_audits = result_distribution.get("OPPORTUNITY", 0)
+    unknown_audits = result_distribution.get("UNKNOWN", 0)
+    remediation_tasks = task_counts.get("REMEDIATION", 0)
+    optimization_tasks = task_counts.get("OPTIMIZATION", 0)
+    data_required_tasks = task_counts.get("DATA_REQUIRED", 0)
+    manual_tasks = task_counts.get("MANUAL_REVIEW", 0)
+    total_audits = len(audit_items)
     return [
         f"SEO 健康评分: {score:.2f} / 100（仅统计已执行规则）",
         f"检测覆盖率: {coverage_pct:.2f}%（实际完成自动/部分检查的程度）",
         f"结论置信度: {confidence_label}（{confidence_pct:.2f}%）",
         f"抓取页面数: {pages_crawled}",
-        f"确认问题（REMEDIATION）: {confirmed} 条",
-        f"警告（WARNING）: {warnings} 条",
-        f"优化机会（OPPORTUNITY）: {opportunities} 条",
-        f"人工评审（MANUAL_REVIEW）: {manual} 条",
-        f"数据缺口（DATA_REQUIRED）: {data_required} 条",
+        f"审计状态（共 {total_audits} 项）— 失败审计: {fail_audits} · "
+        f"警告审计: {warning_audits} · 机会审计: {opportunity_audits} · "
+        f"未验证/人工: {unknown_audits}",
+        f"整改任务（REMEDIATION tasks）: {remediation_tasks} 条",
+        f"优化任务（OPTIMIZATION tasks）: {optimization_tasks} 条",
+        f"数据缺口任务（DATA_REQUIRED tasks）: {data_required_tasks} 条",
+        f"人工评审任务（MANUAL_REVIEW tasks）: {manual_tasks} 条",
     ]
 
 

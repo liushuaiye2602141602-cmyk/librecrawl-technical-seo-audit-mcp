@@ -49,11 +49,15 @@ def _items(count=80):
     items[9]["affected_urls"] = 30
     items[14]["result"] = "OPPORTUNITY"
     items[14]["affected_urls"] = 199
+    items[28]["result"] = "OPPORTUNITY"
+    items[28]["affected_urls"] = 199
+    items[28]["check"] = "hreflang x-default"
     items[19]["execution"] = "NOT_CHECKED"
     items[19]["result"] = "UNKNOWN"
     items[19]["limitations"] = "Data source unavailable: GSC"
     items[24]["execution"] = "NOT_APPLICABLE"
     items[24]["result"] = "UNKNOWN"
+    items[24]["limitations"] = "WordPress-specific rule"
     return items
 
 
@@ -113,14 +117,12 @@ def test_universal_report_always_has_80_audits():
 
 
 def test_management_summary_has_all_buckets():
-    from audit_rules.report_view import LABELS
     view = _view()
     summary = "\n".join(view.management_summary)
-    zh = LABELS["zh-CN"]
-    for key in ("score", "coverage", "confidence", "pages_crawled",
-                "confirmed_issues", "warnings", "optimization",
-                "manual_review", "data_required"):
-        assert zh[key] in summary
+    for bucket in ("SEO 健康评分", "检测覆盖率", "结论置信度", "抓取页面数",
+                   "失败审计", "警告审计", "机会审计", "未验证/人工",
+                   "整改任务", "优化任务", "数据缺口任务", "人工评审任务"):
+        assert bucket in summary
 
 
 def test_key_findings_only_fail_warning_opportunity():
